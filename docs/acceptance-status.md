@@ -10,7 +10,7 @@
 - Android lint：通过，报告 7 条非阻断警告（6 条依赖版本建议、1 条自适应图标 mipmap qualifier 警告）。
 - Gradle 另会对 `android.overridePathCheck=true` 打印一条实验性选项提示；它用于当前 Windows Unicode 路径兼容。
 - Debug APK：`app/build/outputs/apk/debug/app-debug.apk`，10,826,341 bytes。
-- SHA-256：`403CDB3897ACE64B9A8196E9573549C691590F4293C31A263C3290E5C3D9F928`。
+- SHA-256：`17406ACC7C5FF4C6B163A91CC8216A41ECCC87D576E25D61CD748B8F94F484EB`。
 
 构建和测试已在本轮最终源码状态下完成。Windows 中文目录下的 Gradle 测试工作进程有路径兼容问题，因此通过同一源码目录的 ASCII junction 执行；APK 来自此构建。
 
