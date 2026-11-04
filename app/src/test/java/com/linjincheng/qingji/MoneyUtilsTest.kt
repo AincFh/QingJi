@@ -189,6 +189,14 @@ class MoneyUtilsTest {
         assertEquals("999999.90", MoneyUtils.formatCents(99999990L))
     }
 
+    @Test
+    fun formatCentsGroupedAddsThousandsSeparatorsOnlyForDisplay() {
+        assertEquals("1,234.56", MoneyUtils.formatCentsGrouped(123456L))
+        assertEquals("0.05", MoneyUtils.formatCentsGrouped(5L))
+        assertEquals("-12,345,678.90", MoneyUtils.formatCentsGrouped(-1234567890L))
+        assertEquals("-92,233,720,368,547,758.08", MoneyUtils.formatCentsGrouped(Long.MIN_VALUE))
+    }
+
     // ---------- 助手 ----------
 
     private fun validCents(text: String): Long {

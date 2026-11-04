@@ -2,118 +2,227 @@
 
 package com.linjincheng.qingji.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.linjincheng.qingji.R
 import com.linjincheng.qingji.data.ExpenseCategory
 import com.linjincheng.qingji.data.ExpenseEntry
 import com.linjincheng.qingji.ui.components.AmountText
-import com.linjincheng.qingji.ui.components.EmptyHint
-import com.linjincheng.qingji.ui.components.SectionTitle
-import com.linjincheng.qingji.ui.components.StatBar
+import com.linjincheng.qingji.ui.components.CategoryIcon
+import com.linjincheng.qingji.ui.components.CategoryIconBadge
+import com.linjincheng.qingji.ui.components.categoryAccent
+import com.linjincheng.qingji.ui.components.visibleYuanText
 import com.linjincheng.qingji.ui.components.yuanText
+import com.linjincheng.qingji.ui.theme.QingJiSpacing
 import com.linjincheng.qingji.util.DateUtils
+import com.linjincheng.qingji.util.DailyExpenseTotal
 import com.linjincheng.qingji.viewmodel.CategoryStat
 import com.linjincheng.qingji.viewmodel.HomeUiState
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
- * 页面 A：首页 / 消费流水（任务书 §6、契约 §7）。
- * 纯 stateless：数据全部来自 [HomeUiState]，行为只通过回调上抛；
- * 不创建 ViewModel、不引用 repository。
+ * 首页保持无状态：月份、汇总、筛选状态都来自 HomeUiState，所有操作只通过回调上抛。
+ * 月度汇总不依赖 state.entries；该列表只用于显示已筛选的近期流水。
  */
 @Composable
 fun HomeScreen(
     state: HomeUiState,
-    onOpenAdd: () -> Unit,
     onOpenDetail: (Long) -> Unit,
     onMonthChange: (Int) -> Unit,
+    onOpenAllRecords: () -> Unit,
+    onRetryHome: () -> Unit = {},
+    amountsHidden: Boolean = false,
 ) {
     Scaffold(
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                ) {
-                    Button(
-                        onClick = onOpenAdd,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = "记一笔", fontSize = 18.sp)
-                    }
-                }
-            }
-        },
+        containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            contentPadding = PaddingValues(
+                start = QingJiSpacing.md,
+                top = QingJiSpacing.xs,
+                end = QingJiSpacing.md,
+                bottom = QingJiSpacing.xl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            HomeHeader(state = state, onMonthChange = onMonthChange)
-            if (state.isLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            item {
+                HomeHeader(
+                    state = state,
+                    onMonthChange = onMonthChange,
+                )
             }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item { MonthlyTotalCard(totalCents = state.totalCents) }
+
+            if (state.isLoading) {
                 item {
-                    CategoryStatsCard(
-                        stats = state.categoryStats,
-                        totalCents = state.totalCents,
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Text(
+                            text = "正在加载本月消费…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (state.loadFailed) {
+                item { HomeLoadFailure(onRetry = onRetryHome) }
+            }
+
+            if (state.hasLoaded && !state.loadFailed) {
+                item { MonthlyOverview(state = state, amountsHidden = amountsHidden) }
+                item {
+                    DailyExpenseTrend(
+                        days = state.dailyTrend,
                         isLoading = state.isLoading,
+                        amountsHidden = amountsHidden,
+                        title = if (YearMonth.of(state.year, state.month) == YearMonth.now()) {
+                            "近 7 天支出"
+                        } else {
+                            "${state.monthTitle}末 7 天"
+                        },
                     )
                 }
-                item { SectionTitle(text = "消费流水") }
-                if (state.entries.isEmpty()) {
-                    if (!state.isLoading) {
-                        item { EmptyHint(text = "还没有记录，记下第一笔消费吧") }
+                item { CategoryShareSection(state = state, amountsHidden = amountsHidden, maxRows = 3) }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "最近流水",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!state.isLoading && state.recentEntries.isNotEmpty()) {
+                            TextButton(onClick = onOpenAllRecords) { Text("查看全部  ›") }
+                        } else {
+                            TextButton(onClick = onOpenAllRecords) { Text("查看全部") }
+                        }
                     }
-                } else {
-                    items(state.entries, key = { it.id }) { entry ->
-                        ExpenseRow(entry = entry, onClick = { onOpenDetail(entry.id) })
+                }
+                when {
+                    state.isLoading -> {
+                        item {
+                            Text(
+                                text = "正在读取流水…",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    state.recentEntries.isEmpty() && !state.hasMonthEntries -> {
+                        item { NoEntriesThisMonth() }
+                    }
+
+                    else -> {
+                        val todayEpochDay = DateUtils.todayEpochDay()
+                        state.recentEntries.take(3).groupBy { it.expenseDate }
+                            .forEach { (epochDay, entriesForDay) ->
+                            item(key = "date-" + epochDay.toString()) {
+                                Text(
+                                    text = dateGroupLabel(epochDay, todayEpochDay),
+                                    modifier = Modifier.padding(top = 2.dp),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(
+                                items = entriesForDay,
+                                key = { entry -> entry.id },
+                            ) { entry ->
+                                ExpenseRow(
+                                    entry = entry,
+                                    onClick = { onOpenDetail(entry.id) },
+                                    amountsHidden = amountsHidden,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -121,156 +230,686 @@ fun HomeScreen(
     }
 }
 
-/** 顶栏：应用名「轻记」+ 月份（来自 state.monthTitle）+ 上月/下月切换。 */
+@Composable
+internal fun HomeLoadFailure(onRetry: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier.padding(QingJiSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "暂时无法读取消费数据",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "你的记录还在本机，重新读取后再查看统计。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            TextButton(onClick = onRetry) {
+                Text("重新加载", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+    }
+}
+
 @Composable
 private fun HomeHeader(
     state: HomeUiState,
     onMonthChange: (Int) -> Unit,
 ) {
-    Row(
+    val canAdvanceMonth = YearMonth.of(state.year, state.month).isBefore(YearMonth.now())
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 4.dp),
     ) {
+        val stackHeader = maxWidth < 320.dp || LocalDensity.current.fontScale >= 1.3f
+        if (stackHeader) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                HomeBrandBlock()
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    HomeMonthPicker(state, canAdvanceMonth, onMonthChange)
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HomeBrandBlock(modifier = Modifier.weight(1f))
+                HomeMonthPicker(state, canAdvanceMonth, onMonthChange)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeBrandBlock(modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
         Text(
             text = "轻记",
-            modifier = Modifier.weight(1f),
-            fontSize = 26.sp,
+            style = MaterialTheme.typography.headlineMedium,
+            fontFamily = FontFamily.Serif,
             fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
         )
-        IconButton(onClick = { onMonthChange(-1) }) {
-            Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上个月")
-        }
-        Text(
-            text = state.monthTitle,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        IconButton(onClick = { onMonthChange(1) }) {
-            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下个月")
-        }
     }
 }
 
-/** 第一块：本月支出，明显大字号；无数据时由 formatCents(0) 显示 ¥0.00。 */
 @Composable
-private fun MonthlyTotalCard(totalCents: Long) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "本月支出",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
-            AmountText(
-                cents = totalCents,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
-
-/** 第二块：分类统计。按 state.categoryStats 顺序渲染（恒含 5 类，0 元自然排后）。 */
-@Composable
-private fun CategoryStatsCard(
-    stats: List<CategoryStat>,
-    totalCents: Long,
-    isLoading: Boolean,
+private fun HomeMonthPicker(
+    state: HomeUiState,
+    canAdvanceMonth: Boolean,
+    onMonthChange: (Int) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            SectionTitle(text = "分类统计")
-            val hasData = totalCents > 0 && stats.any { it.totalCents > 0 }
-            if (!hasData) {
-                // 无任何数据：引导文案；percent 由契约预计算，界面不做除法，无除零。
-                if (!isLoading) {
+            IconButton(onClick = { onMonthChange(-1) }, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = "上个月",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                text = "${state.year}年${state.month}月",
+                modifier = Modifier.padding(horizontal = 2.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+            )
+            IconButton(
+                onClick = { onMonthChange(1) },
+                enabled = canAdvanceMonth,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "下个月",
+                    tint = if (canAdvanceMonth) MaterialTheme.colorScheme.primary else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MonthlyOverview(state: HomeUiState, amountsHidden: Boolean) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = QingJiSpacing.md, vertical = QingJiSpacing.sm),
+        ) {
+            val showLeaf = maxWidth >= 320.dp
+            val leafWidth = (maxWidth * 0.25f).coerceIn(80.dp, 112.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
                     Text(
-                        text = "本月还没有分类支出，记下一笔看看钱花在哪里吧",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = if (YearMonth.of(state.year, state.month) == YearMonth.now()) {
+                            "本月支出"
+                        } else {
+                            "${state.monthTitle}支出"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val amountFontSize = (maxWidth.value / 7.2f).coerceIn(25f, 36f).sp
+                        Text(
+                            text = visibleYuanText(state.totalCents, amountsHidden),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2,
+                            softWrap = true,
+                            overflow = TextOverflow.Clip,
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = amountFontSize,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.45).sp,
+                            ),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "${state.monthEntryCount} 笔",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Box(
+                            Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)),
+                        )
+                        Text(
+                            text = monthComparison(
+                                currentCents = state.comparisonCurrentTotalCents,
+                                previousCents = state.previousMonthTotalCents,
+                                label = state.comparisonLabel,
+                                amountsHidden = amountsHidden,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-            } else {
-                stats.forEach { stat ->
-                    CategoryStatRow(stat = stat)
+                if (showLeaf) {
+                    Image(
+                        painter = painterResource(R.drawable.qingji_leaf_branch),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .width(leafWidth)
+                            .height(96.dp)
+                            .padding(start = 3.dp),
+                        alpha = 0.92f,
+                    )
                 }
             }
         }
     }
 }
 
-/** 单个分类统计行：名称 / 金额 / 占比 + 进度条（占比 0 时进度条可见为 0）。 */
+private fun monthComparison(
+    currentCents: Long,
+    previousCents: Long,
+    label: String,
+    amountsHidden: Boolean,
+): String = when {
+    previousCents <= 0L && currentCents > 0L -> "上月同期暂无支出"
+    previousCents <= 0L -> "上月暂无支出"
+    currentCents == previousCents -> "${label}持平"
+    currentCents > previousCents -> "${label}多 ${visibleYuanText(currentCents - previousCents, amountsHidden)}"
+    else -> "${label}少 ${visibleYuanText(previousCents - currentCents, amountsHidden)}"
+}
+
 @Composable
-private fun CategoryStatRow(stat: CategoryStat) {
-    Column {
+internal fun DailyExpenseTrend(
+    days: List<DailyExpenseTotal>,
+    isLoading: Boolean,
+    amountsHidden: Boolean,
+    title: String = "近 7 天支出",
+) {
+    val hasSpending = days.any { it.totalCents > 0L }
+    var selectedEpochDay by remember(days.firstOrNull()?.epochDay, days.lastOrNull()?.epochDay) {
+        mutableStateOf<Long?>(null)
+    }
+    val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stat.category.label,
-                style = MaterialTheme.typography.bodyMedium,
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
             )
-            Spacer(Modifier.weight(1f))
             Text(
-                text = yuanText(stat.totalCents),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                text = when {
+                    isLoading -> "正在读取…"
+                    !hasSpending -> "暂无消费"
+                    else -> "合计 ${visibleYuanText(days.sumOf { it.totalCents }, amountsHidden)}"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.width(8.dp))
+        }
+
+        if (days.isEmpty() || !hasSpending) {
             Text(
-                text = "${stat.percent}%",
+                text = if (isLoading) "正在读取趋势…" else "这段时间还没有支出，记下一笔后会显示每日变化",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            selectedDay?.let { day ->
+                Text(
+                    text = "${DateUtils.formatDate(day.epochDay)} · 支出 ${visibleYuanText(day.totalCents, amountsHidden)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            val maxCents = days.maxOfOrNull { it.totalCents.coerceAtLeast(0L) } ?: 0L
+            val maxIndex = if (maxCents > 0L) days.indexOfLast { it.totalCents == maxCents } else -1
+            val lineColor = MaterialTheme.colorScheme.primary
+            val areaColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+            val markerColor = MaterialTheme.colorScheme.tertiary
+            val surfaceColor = MaterialTheme.colorScheme.surface
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val chartWidth = maxOf(maxWidth, 336.dp)
+                    Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        Column(modifier = Modifier.width(chartWidth)) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .semantics {
+                                    contentDescription = "$title 趋势图；逐日金额可在下方日期中查看"
+                                },
+                        ) {
+                            val baseY = size.height - 7.dp.toPx()
+                            val topY = 7.dp.toPx()
+                            val chartHeight = (baseY - topY).coerceAtLeast(1f)
+                            val step = size.width / days.size
+                            val points = days.mapIndexed { index, day ->
+                                val ratio = if (maxCents > 0L) {
+                                    (day.totalCents.coerceAtLeast(0L).toDouble() / maxCents.toDouble()).toFloat()
+                                } else 0f
+                                androidx.compose.ui.geometry.Offset(
+                                    x = step * index + step / 2f,
+                                    y = baseY - chartHeight * 0.86f * ratio,
+                                )
+                            }
+                            if (points.isNotEmpty()) {
+                                val line = Path().apply {
+                                    moveTo(points.first().x, points.first().y)
+                                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                                }
+                                if (maxCents > 0L) {
+                                    val area = Path().apply {
+                                        moveTo(points.first().x, baseY)
+                                        lineTo(points.first().x, points.first().y)
+                                        points.drop(1).forEach { lineTo(it.x, it.y) }
+                                        lineTo(points.last().x, baseY)
+                                        close()
+                                    }
+                                    drawPath(area, areaColor)
+                                }
+                                drawPath(
+                                    line,
+                                    lineColor,
+                                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                                )
+                                points.forEachIndexed { index, point ->
+                                    if (index == maxIndex || days[index].epochDay == selectedEpochDay) {
+                                        drawCircle(surfaceColor, radius = 7.dp.toPx(), center = point)
+                                        drawCircle(markerColor, radius = 4.5.dp.toPx(), center = point)
+                                    } else {
+                                        drawCircle(lineColor.copy(alpha = 0.86f), radius = 3.dp.toPx(), center = point)
+                                    }
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().selectableGroup(),
+                        ) {
+                            days.forEach { day ->
+                                val date = LocalDate.ofEpochDay(day.epochDay)
+                                val isSelected = day.epochDay == selectedEpochDay
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .selectable(
+                                            selected = isSelected,
+                                            role = Role.RadioButton,
+                                            onClick = { selectedEpochDay = day.epochDay },
+                                        )
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = DateUtils.formatDate(day.epochDay) +
+                                                "，支出 " + visibleYuanText(day.totalCents, amountsHidden)
+                                        },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(
+                                        text = date.dayOfMonth.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSelected || (day.totalCents == maxCents && maxCents > 0L)) {
+                                            FontWeight.Bold
+                                        } else FontWeight.Medium,
+                                        color = if (isSelected || (day.totalCents == maxCents && maxCents > 0L)) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = weekdayLabel(date.dayOfWeek.value),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun weekdayLabel(dayOfWeek: Int): String =
+    "一二三四五六日".getOrElse(dayOfWeek - 1) { ' ' }.toString()
+
+@Composable
+internal fun CategoryShareSection(
+    state: HomeUiState,
+    amountsHidden: Boolean,
+    maxRows: Int = Int.MAX_VALUE,
+) {
+    val positiveStats = state.categoryStats.filter { it.totalCents > 0L }.take(maxRows)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "分类支出",
+            style = MaterialTheme.typography.titleLarge,
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (state.isLoading && positiveStats.isEmpty()) {
+            Text(
+                text = "正在统计本月分类支出…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (positiveStats.isEmpty()) {
+            Text(
+                text = "记下一笔后，会在这里看到消费去向",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Spacer(Modifier.height(6.dp))
-        StatBar(percent = stat.percent, modifier = Modifier.fillMaxWidth())
+        positiveStats.forEach { stat ->
+            CategoryShareRow(stat = stat, amountsHidden = amountsHidden)
+        }
     }
 }
 
-/** 第三块：单条流水（分类、备注、金额、日期），点击进详情。 */
 @Composable
-private fun ExpenseRow(
+private fun CategoryShareRow(stat: CategoryStat, amountsHidden: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CategoryIconBadge(
+                category = stat.category,
+                modifier = Modifier.size(32.dp),
+                size = 32.dp,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stat.category.label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = visibleYuanText(stat.totalCents, amountsHidden),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stat.percent.toString() + "%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 40.dp)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(stat.percent.coerceIn(0, 100) / 100f)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(categoryAccent(stat.category)),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun TransactionControls(
+    searchText: String,
+    categoryFilter: ExpenseCategory?,
+    onSearchTextChange: (String) -> Unit,
+    onCategoryFilterChange: (ExpenseCategory?) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = onSearchTextChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp),
+            singleLine = true,
+            placeholder = { Text("搜索全部流水：备注、金额或日期") },
+            leadingIcon = {
+                Icon(Icons.Filled.Search, contentDescription = "搜索全部流水")
+            },
+            trailingIcon = if (searchText.isNotEmpty()) {
+                {
+                    IconButton(onClick = { onSearchTextChange("") }) {
+                        Icon(Icons.Filled.Clear, contentDescription = "清除搜索")
+                    }
+                }
+            } else {
+                null
+            },
+        )
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            FilterChip(
+                selected = categoryFilter == null,
+                onClick = { onCategoryFilterChange(null) },
+                label = { Text("全部") },
+            )
+            ExpenseCategory.entries.forEach { category ->
+                FilterChip(
+                    selected = categoryFilter == category,
+                    onClick = {
+                        onCategoryFilterChange(if (categoryFilter == category) null else category)
+                    },
+                    label = { Text(category.label) },
+                    leadingIcon = {
+                        CategoryIcon(
+                            category = category,
+                            modifier = Modifier.size(18.dp),
+                            contentDescription = null,
+                        )
+                    },
+                )
+            }
+        }
+        if (searchText.isNotBlank() || categoryFilter != null) {
+            TextButton(
+                onClick = {
+                    onSearchTextChange("")
+                    onCategoryFilterChange(null)
+                },
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("清除搜索和分类")
+            }
+        }
+    }
+}
+
+@Composable
+internal fun NoEntriesThisMonth() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "还没有记录，记下第一笔消费吧",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = "本月的消费记录会显示在这里",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+internal fun NoMatchingEntries(onClear: (() -> Unit)?) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "没有找到匹配的流水",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = "试试金额、备注、日期或其他分类",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (onClear != null) {
+            TextButton(onClick = onClear) {
+                Text("清除搜索和筛选")
+            }
+        }
+    }
+}
+
+internal fun dateGroupLabel(epochDay: Long, todayEpochDay: Long): String {
+    if (epochDay == todayEpochDay) return "今天"
+    if (epochDay == todayEpochDay - 1L) return "昨天"
+    val date = LocalDate.ofEpochDay(epochDay)
+    return "${date.monthValue}月${date.dayOfMonth}日 · 周${weekdayLabel(date.dayOfWeek.value)}"
+}
+
+@Composable
+internal fun ExpenseRow(
     entry: ExpenseEntry,
     onClick: () -> Unit,
+    amountsHidden: Boolean,
 ) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    val note = entry.note.trim()
+    val time = Instant.ofEpochMilli(entry.createdAt)
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()))
+    val supportingText = if (note.isBlank()) time else "$note · $time"
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = entry.category.label + "，" +
+                        (entry.note.ifBlank { "无备注" }) + "，" +
+                        visibleYuanText(entry.amountCents, amountsHidden) + "，" +
+                        DateUtils.formatDate(entry.expenseDate)
+                }
+                .padding(horizontal = 2.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            CategoryIconBadge(
+                category = entry.category,
+                modifier = Modifier.size(38.dp),
+                size = 38.dp,
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = entry.category.label,
                     style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(2.dp))
                 Text(
-                    text = entry.note.ifBlank { "无备注" },
+                    text = supportingText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.width(12.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                AmountText(cents = entry.amountCents, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = DateUtils.formatDate(entry.expenseDate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "-" + visibleYuanText(entry.amountCents, amountsHidden),
+                modifier = Modifier.widthIn(max = 140.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Clip,
+            )
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 48.dp)
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        )
     }
 }
 
-@Preview(showBackground = true, name = "首页 · 有数据")
+@Preview(showBackground = true, name = "首页 · 有流水")
 @Composable
 private fun HomeScreenPreview() {
     MaterialTheme {
@@ -279,18 +918,18 @@ private fun HomeScreenPreview() {
                 year = 2026,
                 month = 11,
                 monthTitle = "2026 年 11 月",
-                totalCents = 6200,
+                totalCents = 6200L,
                 categoryStats = listOf(
-                    CategoryStat(ExpenseCategory.FOOD, 5000, 81),
-                    CategoryStat(ExpenseCategory.TRANSPORT, 1200, 19),
-                    CategoryStat(ExpenseCategory.SHOPPING, 0, 0),
-                    CategoryStat(ExpenseCategory.DAILY, 0, 0),
-                    CategoryStat(ExpenseCategory.OTHER, 0, 0),
+                    CategoryStat(ExpenseCategory.FOOD, 5000L, 81),
+                    CategoryStat(ExpenseCategory.TRANSPORT, 1200L, 19),
+                    CategoryStat(ExpenseCategory.SHOPPING, 0L, 0),
+                    CategoryStat(ExpenseCategory.DAILY, 0L, 0),
+                    CategoryStat(ExpenseCategory.OTHER, 0L, 0),
                 ),
                 entries = listOf(
                     ExpenseEntry(
                         id = 1L,
-                        amountCents = 5000,
+                        amountCents = 5000L,
                         category = ExpenseCategory.FOOD,
                         note = "午饭",
                         expenseDate = 20761L,
@@ -299,7 +938,27 @@ private fun HomeScreenPreview() {
                     ),
                     ExpenseEntry(
                         id = 2L,
-                        amountCents = 1200,
+                        amountCents = 1200L,
+                        category = ExpenseCategory.TRANSPORT,
+                        note = "",
+                        expenseDate = 20761L,
+                        createdAt = 1793720000000L,
+                        updatedAt = 1793720000000L,
+                    ),
+                ),
+                recentEntries = listOf(
+                    ExpenseEntry(
+                        id = 1L,
+                        amountCents = 2850L,
+                        category = ExpenseCategory.FOOD,
+                        note = "午餐",
+                        expenseDate = 20761L,
+                        createdAt = 1793764800000L,
+                        updatedAt = 1793764800000L,
+                    ),
+                    ExpenseEntry(
+                        id = 2L,
+                        amountCents = 1200L,
                         category = ExpenseCategory.TRANSPORT,
                         note = "",
                         expenseDate = 20761L,
@@ -308,15 +967,30 @@ private fun HomeScreenPreview() {
                     ),
                 ),
                 isLoading = false,
+                previousMonthTotalCents = 7400L,
+                dailyTrend = listOf(
+                    DailyExpenseTotal(20755L, 1800L),
+                    DailyExpenseTotal(20756L, 0L),
+                    DailyExpenseTotal(20757L, 2400L),
+                    DailyExpenseTotal(20758L, 0L),
+                    DailyExpenseTotal(20759L, 900L),
+                    DailyExpenseTotal(20760L, 0L),
+                    DailyExpenseTotal(20761L, 1200L),
+                ),
+                searchText = "",
+                categoryFilter = null,
+                hasMonthEntries = true,
+                monthEntryCount = 2,
+                hasLoaded = true,
             ),
-            onOpenAdd = {},
             onOpenDetail = {},
             onMonthChange = {},
+            onOpenAllRecords = {},
         )
     }
 }
 
-@Preview(showBackground = true, name = "首页 · 空数据")
+@Preview(showBackground = true, name = "首页 · 本月无流水")
 @Composable
 private fun HomeScreenEmptyPreview() {
     MaterialTheme {
@@ -325,20 +999,21 @@ private fun HomeScreenEmptyPreview() {
                 year = 2026,
                 month = 11,
                 monthTitle = "2026 年 11 月",
-                totalCents = 0,
-                categoryStats = listOf(
-                    CategoryStat(ExpenseCategory.FOOD, 0, 0),
-                    CategoryStat(ExpenseCategory.TRANSPORT, 0, 0),
-                    CategoryStat(ExpenseCategory.SHOPPING, 0, 0),
-                    CategoryStat(ExpenseCategory.DAILY, 0, 0),
-                    CategoryStat(ExpenseCategory.OTHER, 0, 0),
-                ),
+                totalCents = 0L,
+                categoryStats = ExpenseCategory.entries.map { CategoryStat(it, 0L, 0) },
                 entries = emptyList(),
                 isLoading = false,
+                previousMonthTotalCents = 0L,
+                dailyTrend = (0L..6L).map { offset -> DailyExpenseTotal(20755L + offset, 0L) },
+                searchText = "",
+                categoryFilter = null,
+                hasMonthEntries = false,
+                monthEntryCount = 0,
+                hasLoaded = true,
             ),
-            onOpenAdd = {},
             onOpenDetail = {},
             onMonthChange = {},
+            onOpenAllRecords = {},
         )
     }
 }

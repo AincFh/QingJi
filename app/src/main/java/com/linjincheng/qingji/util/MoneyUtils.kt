@@ -75,4 +75,15 @@ object MoneyUtils {
         val text = "$yuan.${rem.toString().padStart(2, '0')}"
         return if (negative) "-$text" else text
     }
+
+    /** 分 → 面向用户的金额文本，使用千分位分组；输入表单仍使用不带分组的 formatCents。 */
+    fun formatCentsGrouped(cents: Long): String {
+        val raw = cents.toString()
+        val negative = raw.startsWith('-')
+        val digits = raw.removePrefix("-")
+        val integer = digits.dropLast(2).ifEmpty { "0" }
+        val fraction = digits.takeLast(2).padStart(2, '0')
+        val groupedInteger = integer.reversed().chunked(3).joinToString(",").reversed()
+        return (if (negative) "-" else "") + "$groupedInteger.$fraction"
+    }
 }

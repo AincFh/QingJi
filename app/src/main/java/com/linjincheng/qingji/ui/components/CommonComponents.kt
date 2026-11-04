@@ -12,13 +12,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import com.linjincheng.qingji.ui.theme.QingJiSpacing
 import com.linjincheng.qingji.util.MoneyUtils
 
 /**
- * 统一金额文案：人民币符号 + MoneyUtils.formatCents（单位分 → "62.00"）。
- * 全应用金额展示一律经过这里，保证「¥ + formatCents」口径一致（契约 §7）。
+ * 统一金额文案：人民币符号 + 带千分位的展示格式（单位分 → "1,234.00"）。
+ * 输入表单和解析仍使用不带千分位的规范金额文本。
  */
-fun yuanText(cents: Long): String = "¥" + MoneyUtils.formatCents(cents)
+fun yuanText(cents: Long): String = "¥" + MoneyUtils.formatCentsGrouped(cents)
+
+fun visibleYuanText(cents: Long, hidden: Boolean): String =
+    if (hidden) "¥••••" else yuanText(cents)
 
 /** 金额文本组件：默认读 MaterialTheme 正文样式，可用 fontSize/fontWeight/color 覆盖。 */
 @Composable
@@ -68,7 +72,7 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
         text = text,
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 32.dp),
+            .padding(vertical = QingJiSpacing.xxl),
         textAlign = TextAlign.Center,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

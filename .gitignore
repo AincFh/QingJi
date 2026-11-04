@@ -8,3 +8,10 @@ build/
 .kotlin/
 .externalNativeBuild
 .cxx
+
+# Device evidence contains private transaction details; keep it local.
+/docs/device-acceptance/*.png
+/docs/device-acceptance/*.xml
+
+# Local design reference capture is not licensed for redistribution.
+/docs/design-references/*.png

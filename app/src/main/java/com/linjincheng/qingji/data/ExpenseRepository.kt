@@ -15,6 +15,9 @@ interface ExpenseRepository {
     suspend fun deleteExpense(id: Long): Boolean
     suspend fun getExpenseById(id: Long): ExpenseEntry?
 
+    /** 全部流水：按消费日期降序、同日按创建时间降序；仅用于跨月搜索与筛选。 */
+    suspend fun getAllExpenses(): List<ExpenseEntry>
+
     /** 排序：expense_date 降序，同日 createdAt 降序。 */
     suspend fun getExpensesByMonth(year: Int, month: Int): List<ExpenseEntry>
 
@@ -67,6 +70,23 @@ class ExpenseRepositoryImpl(private val databaseHelper: ExpenseDatabaseHelper) :
             "1",
         ).use { cursor ->
             if (cursor.moveToFirst()) cursor.toEntry() else null
+        }
+    }
+
+    override suspend fun getAllExpenses(): List<ExpenseEntry> = withContext(Dispatchers.IO) {
+        val db = databaseHelper.readableDatabase
+        db.query(
+            TABLE_EXPENSES,
+            ALL_COLUMNS,
+            null,
+            null,
+            null,
+            null,
+            "$COL_EXPENSE_DATE DESC, $COL_CREATED_AT DESC",
+        ).use { cursor ->
+            val result = ArrayList<ExpenseEntry>(cursor.count)
+            while (cursor.moveToNext()) result.add(cursor.toEntry())
+            result
         }
     }
 

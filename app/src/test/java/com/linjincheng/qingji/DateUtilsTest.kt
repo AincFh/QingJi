@@ -10,8 +10,6 @@ import org.junit.Test
  * 覆盖：月份边界 [当月首日, 次月首日)（2026-12→2027-01 跨年、2026-01 上月→2025-12 跨年、
  * 闰年 2024-02→2024-03 与平年对照）、adjustMonth 跨年、monthTitle/formatDate 展示格式。
  *
- * 【未编译执行，待集成阶段验证】C2 并行阶段无 Gradle 编译环境，
- * 本文件尚未编译与运行；测试结论以集成阶段真实输出为准。
  */
 class DateUtilsTest {
 
