@@ -43,8 +43,8 @@ import com.linjincheng.qingji.viewmodel.ExpenseViewModel
 import com.linjincheng.qingji.viewmodel.Screen
 
 /**
- * 单 Activity 入口（契约 §0/§8）：导航即状态，按 ViewModel 的 Screen 三态装配三屏。
- * 集成版由主对话写入，替换 C1 骨架桩。
+ * Single-activity host for the tab shell and secondary form/detail routes.
+ * ExpenseViewModel.Screen tracks the active secondary screen.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

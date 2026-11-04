@@ -1,4 +1,4 @@
-// 轻记 app 模块。依赖仅限 docs/契约_轻记工程契约.md §0 白名单；版本矩阵锁定，不得升级。
+// App module dependencies. Keep versions aligned with the root Android/Kotlin plugins and Compose BOM.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")

@@ -1,7 +1,7 @@
 package com.linjincheng.qingji.data
 
 /**
- * 消费记录实体（契约 §2 冻结）。
+ * A locally stored expense record.
  * 金额单位为「分」（Long），严禁 Float/Double；expenseDate 为 LocalDate.toEpochDay()。
  */
 data class ExpenseEntry(

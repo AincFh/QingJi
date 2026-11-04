@@ -1,7 +1,7 @@
 package com.linjincheng.qingji.data
 
 /**
- * 固定五个消费分类（契约 §2 冻结），不允许用户自定义。
+ * Built-in expense categories persisted by their stable code values.
  */
 enum class ExpenseCategory(val code: String, val label: String) {
     FOOD("FOOD", "餐饮"),

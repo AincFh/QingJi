@@ -1,7 +1,7 @@
 package com.linjincheng.qingji.util
 
 /**
- * 金额解析结果（契约 §5 冻结）。
+ * Result of parsing a user-entered amount.
  * reason 稳定键取值："EMPTY" | "NOT_NUMBER" | "NOT_POSITIVE" | "TOO_MANY_DECIMALS" | "OUT_OF_RANGE"。
  */
 sealed interface AmountParseResult {
@@ -18,7 +18,7 @@ sealed interface AmountParseResult {
  */
 object MoneyUtils {
 
-    /** 稳定原因键（私有常量，值与契约 §5 完全一致）。 */
+    /** Stable reason keys consumed by form validation and tests. */
     private const val REASON_EMPTY = "EMPTY"
     private const val REASON_NOT_NUMBER = "NOT_NUMBER"
     private const val REASON_NOT_POSITIVE = "NOT_POSITIVE"
@@ -32,7 +32,7 @@ object MoneyUtils {
     private val AMOUNT_REGEX = Regex("""-?\d+(\.\d+)?""")
 
     /**
-     * 元文本 → 分（契约 §5 规则，按序判定）：
+     * Convert a yuan string to integer cents, checking conditions in this order:
      * 先 trim；"28"→2800；"28.50"→2850；""→EMPTY；
      * 0/负数→NOT_POSITIVE；小数超两位→TOO_MANY_DECIMALS；
      * 有效但不在 1..99999999 分（即 0.01–999999.99 元）→OUT_OF_RANGE。
@@ -48,7 +48,7 @@ object MoneyUtils {
         val intPart = if ('.' in unsigned) unsigned.substringBefore('.') else unsigned
         val fracPart = if ('.' in unsigned) unsigned.substringAfter('.') else ""
 
-        // 0 或负数 → NOT_POSITIVE（按契约列出顺序，先于小数位判定）
+        // Reject zero and negative values before checking decimal precision.
         val hasNonZeroDigit = (intPart + fracPart).any { it != '0' }
         if (negative || !hasNonZeroDigit) return AmountParseResult.Invalid(REASON_NOT_POSITIVE)
 

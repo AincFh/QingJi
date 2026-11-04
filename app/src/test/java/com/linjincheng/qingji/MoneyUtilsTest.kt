@@ -7,12 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * MoneyUtils 单元测试（JUnit4，依赖仅契约白名单 junit:junit:4.13.2）。
+ * MoneyUtils unit tests using JUnit 4.
  * 覆盖：金额解析全部分支（EMPTY / NOT_NUMBER / NOT_POSITIVE / TOO_MANY_DECIMALS / OUT_OF_RANGE / 合法值）
  * 与 formatCents（含 0.01、62、999999.99）。
- *
- * 【未编译执行，待集成阶段验证】C2 并行阶段无 Gradle 编译环境，
- * 本文件尚未编译与运行；测试结论以集成阶段真实输出为准。
  */
 class MoneyUtilsTest {
 

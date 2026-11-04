@@ -43,8 +43,7 @@ fun AmountText(
 }
 
 /**
- * 分类占比进度条：percent 取 0..100（契约 §6，由 C2 四舍五入给出）。
- * 占比为 0 时进度条仍然可见、进度为 0，不隐藏（任务书 §6 第二块）。
+ * Category percentage bar. Percent is clamped to 0..100; a zero value remains visible with no fill.
  */
 @Composable
 fun StatBar(percent: Int, modifier: Modifier = Modifier) {

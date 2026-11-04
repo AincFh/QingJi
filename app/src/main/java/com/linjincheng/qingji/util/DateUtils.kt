@@ -4,7 +4,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /**
- * 日期工具（契约 §5 冻结）：全部基于 java.time（minSdk 26 直接可用）。
+ * Date helpers based on java.time, available directly at the app's minSdk 26.
  * 月度边界一律用日期运算推导，跨年正确，禁止只比较月份数字。
  */
 object DateUtils {

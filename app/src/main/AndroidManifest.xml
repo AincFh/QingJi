@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 离线应用：按契约 §0 不声明 INTERNET 权限 -->
+    <!-- Offline-first app: network access is not requested. -->
 
     <application
         android:allowBackup="false"

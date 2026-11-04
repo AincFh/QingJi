@@ -5,8 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /**
- * SQLiteOpenHelper：数据库 qingji.db，version 1（契约 §3 冻结）。
- * 建表与索引 SQL 与契约 §3 逐字一致；只建结构，不插入任何预置/演示数据。
+ * SQLiteOpenHelper for the local qingji.db store. The current schema creates only the expense table and date index.
  */
 class ExpenseDatabaseHelper(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -24,7 +23,7 @@ class ExpenseDatabaseHelper(context: Context) :
         const val DATABASE_NAME = "qingji.db"
         const val DATABASE_VERSION = 1
 
-        /** 与契约 §3 逐字一致（表结构）。 */
+        /** Expenses table schema. */
         const val SQL_CREATE_EXPENSES = """CREATE TABLE expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
@@ -35,7 +34,7 @@ class ExpenseDatabaseHelper(context: Context) :
     updated_at INTEGER NOT NULL
 )"""
 
-        /** 与契约 §3 逐字一致（日期索引）。 */
+        /** Index used by date-based history queries. */
         const val SQL_CREATE_INDEX = "CREATE INDEX idx_expenses_date ON expenses(expense_date)"
     }
 }

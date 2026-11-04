@@ -8,6 +8,7 @@
 - 结果：`BUILD SUCCESSFUL`。
 - JVM 单元测试：61 项通过、0 失败、0 错误、0 跳过（DateUtils 14、ExpenseAnalytics 15、MoneyUtils 32）。
 - Android lint：通过，报告 7 条非阻断警告（6 条依赖版本建议、1 条自适应图标 mipmap qualifier 警告）。
+- Gradle 另会对 `android.overridePathCheck=true` 打印一条实验性选项提示；它用于当前 Windows Unicode 路径兼容。
 - Debug APK：`app/build/outputs/apk/debug/app-debug.apk`，10,826,341 bytes。
 - SHA-256：`403CDB3897ACE64B9A8196E9573549C691590F4293C31A263C3290E5C3D9F928`。
 

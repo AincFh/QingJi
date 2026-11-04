@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * 屏幕路由（契约 §6 冻结）：不使用 navigation-compose，导航即状态。
+ * Secondary screen routes are represented as state; the app does not use Navigation Compose.
  */
 sealed interface Screen {
     data object Home : Screen
@@ -101,7 +101,7 @@ data class DetailUiState(
 )
 
 /**
- * 轻记全局 ViewModel（契约 §6 冻结公开签名，私有成员为实现细节）。
+ * App-level ViewModel for navigation and expense screen state.
  * 金额一律整数分；统计只在内存重算；数据库写入仅经 ExpenseRepository（内部 Dispatchers.IO）。
  */
 class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() {
@@ -359,10 +359,10 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     }
 
     /**
-     * 保存（契约 §6）：
+     * Save the current form:
      * 校验失败 → amountError 置原因键（同 AmountParseResult.reason）；
      * saving=true 期间忽略重复提交；
-     * 成功 → saved=true，按任务书 §6 导航树返回（新增→首页，编辑→详情），并重算当月统计；
+     * On success, set saved=true, return to the appropriate screen, and refresh monthly statistics;
      * 失败（写库异常或原记录已不存在）→ saveFailed=true。
      */
     fun saveExpense() {
@@ -686,7 +686,7 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
 
     companion object {
         /**
-         * 契约 §6：内部组装
+         * Build the ViewModel with the app context's SQLite-backed repository:
          * ExpenseViewModel(ExpenseRepositoryImpl(ExpenseDatabaseHelper(context.applicationContext)))。
          */
         fun provideFactory(context: Context): ViewModelProvider.Factory {

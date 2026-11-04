@@ -7,7 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 仓储接口（契约 §4 冻结）：全部 suspend，实现内部统一切换到 Dispatchers.IO。
+ * Repository interface for expense operations. The SQLite implementation dispatches database work to IO.
  */
 interface ExpenseRepository {
     suspend fun insertExpense(entry: ExpenseEntry): Long
