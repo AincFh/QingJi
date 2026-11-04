@@ -44,8 +44,9 @@ object MoneyUtils {
 
         val negative = trimmed.startsWith("-")
         val unsigned = trimmed.removePrefix("-")
-        val intPart = unsigned.substringBefore('.', missingDelimiterValue = "")
-        val fracPart = unsigned.substringAfter('.', missingDelimiterValue = "")
+        // 无小数点时整数部分=整个无符号串（missingDelimiterValue 传 unsigned，不能传 ""）
+        val intPart = if ('.' in unsigned) unsigned.substringBefore('.') else unsigned
+        val fracPart = if ('.' in unsigned) unsigned.substringAfter('.') else ""
 
         // 0 或负数 → NOT_POSITIVE（按契约列出顺序，先于小数位判定）
         val hasNonZeroDigit = (intPart + fracPart).any { it != '0' }
