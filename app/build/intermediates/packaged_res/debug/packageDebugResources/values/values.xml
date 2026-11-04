@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#1B6EF3</color>
+    <string name="app_name">轻记</string>
+    <style name="Theme.QingJi" parent="android:Theme.Material.Light.NoActionBar"/>
+</resources>

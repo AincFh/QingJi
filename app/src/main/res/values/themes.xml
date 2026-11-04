@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 无 AppCompat 依赖，使用框架主题兼容 Compose（契约 §8 允许） -->
+    <style name="Theme.QingJi" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

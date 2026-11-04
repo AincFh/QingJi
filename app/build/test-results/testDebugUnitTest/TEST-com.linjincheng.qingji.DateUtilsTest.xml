@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.linjincheng.qingji.DateUtilsTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-04T12:20:25" hostname="AINCFH_PRO" time="0.057">
+  <properties/>
+  <testcase name="nextMonthStartOfJanuaryIsFebruary" classname="com.linjincheng.qingji.DateUtilsTest" time="0.028"/>
+  <testcase name="january2027StartEqualsNextMonthStartOfDecember2026" classname="com.linjincheng.qingji.DateUtilsTest" time="0.001"/>
+  <testcase name="nextMonthStartCrossesYear2026To2027" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="monthTitleFormat" classname="com.linjincheng.qingji.DateUtilsTest" time="0.011"/>
+  <testcase name="adjustMonthMultipleSteps" classname="com.linjincheng.qingji.DateUtilsTest" time="0.005"/>
+  <testcase name="adjustMonthDecemberForwardCrossesYear" classname="com.linjincheng.qingji.DateUtilsTest" time="0.001"/>
+  <testcase name="adjustMonthLeapFebruaryForward" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="nonLeapYearFebruaryHas28Days" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="adjustMonthJanuaryBackwardCrossesYear" classname="com.linjincheng.qingji.DateUtilsTest" time="0.001"/>
+  <testcase name="todayMatchesLocalDateNow" classname="com.linjincheng.qingji.DateUtilsTest" time="0.006"/>
+  <testcase name="leapYearFebruaryHas29Days" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="formatDatePadsMonthAndDay" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="decemberToJanuaryIs31Days" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <testcase name="monthStartOfNovember2026" classname="com.linjincheng.qingji.DateUtilsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
