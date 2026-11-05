@@ -380,7 +380,7 @@ private fun MonthlySummary(state: HomeUiState, amountsHidden: Boolean) {
                 text = visibleYuanText(state.totalCents, amountsHidden),
                 modifier = Modifier.semantics {
                     contentDescription = if (amountsHidden) {
-                        "消费总额"
+                        "金额已隐藏"
                     } else {
                         visibleYuanText(state.totalCents, hidden = false)
                     }
