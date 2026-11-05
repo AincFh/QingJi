@@ -378,6 +378,13 @@ private fun MonthlySummary(state: HomeUiState, amountsHidden: Boolean) {
             )
             Text(
                 text = visibleYuanText(state.totalCents, amountsHidden),
+                modifier = Modifier.semantics {
+                    contentDescription = if (amountsHidden) {
+                        "消费总额"
+                    } else {
+                        visibleYuanText(state.totalCents, hidden = false)
+                    }
+                },
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
@@ -450,12 +457,26 @@ private fun ComparisonSummary(
                         )
                         Text(
                             text = comparison.title,
+                            modifier = Modifier.semantics {
+                                contentDescription = if (amountsHidden) {
+                                    comparison.title.replace("¥••••", "金额已隐藏")
+                                } else {
+                                    comparison.title
+                                }
+                            },
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
                     Text(
                         text = comparison.detail,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (amountsHidden) {
+                                comparison.detail.replace("¥••••", "金额已隐藏")
+                            } else {
+                                comparison.detail
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -506,6 +527,9 @@ private fun ComparisonAmountRow(
             )
             Text(
                 text = visibleYuanText(amountCents, amountsHidden),
+                modifier = Modifier.semantics {
+                    contentDescription = amountContentDescription(amountCents, amountsHidden)
+                },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -537,6 +561,9 @@ private data class ComparisonCopy(
     val detail: String,
     val accent: androidx.compose.ui.graphics.Color,
 )
+
+private fun amountContentDescription(cents: Long, amountsHidden: Boolean): String =
+    if (amountsHidden) "金额已隐藏" else visibleYuanText(cents, hidden = false)
 
 @Composable
 private fun comparisonText(state: HomeUiState, amountsHidden: Boolean): ComparisonCopy {
@@ -675,7 +702,7 @@ private fun CategoryBreakdown(
                             contentDescription = buildString {
                                 append(stat.category.label)
                                 append("，金额 ")
-                                append(visibleYuanText(stat.totalCents, amountsHidden))
+                                append(amountContentDescription(stat.totalCents, amountsHidden))
                                 append("，占比 ")
                                 append(stat.percent)
                                 append("%")
@@ -736,7 +763,7 @@ private fun CategoryBreakdownRow(
                 contentDescription = buildString {
                     append(category.label)
                     append("，金额 ")
-                    append(visibleYuanText(stat.totalCents, amountsHidden))
+                    append(amountContentDescription(stat.totalCents, amountsHidden))
                     append("，占比 ")
                     append(stat.percent)
                     append("%")
@@ -945,7 +972,7 @@ private fun TrendChart(
     val markerColor = MaterialTheme.colorScheme.tertiary
     val surfaceColor = MaterialTheme.colorScheme.surface
     val chartDescription = days.joinToString(separator = "；") { day ->
-        "${DateUtils.formatDate(day.epochDay)}支出${visibleYuanText(day.totalCents, amountsHidden)}，${day.transactionCount}笔"
+        "${DateUtils.formatDate(day.epochDay)}支出${amountContentDescription(day.totalCents, amountsHidden)}，${day.transactionCount}笔"
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1059,7 +1086,7 @@ private fun SelectedDaySummary(
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 contentDescription = "${DateUtils.formatDate(day.epochDay)}，支出 " +
-                    visibleYuanText(day.totalCents, amountsHidden) + "，${day.transactionCount} 笔"
+                    amountContentDescription(day.totalCents, amountsHidden) + "，${day.transactionCount} 笔"
             },
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f),
@@ -1122,7 +1149,7 @@ private fun DaySelector(
             val dateDescription = buildString {
                 append(DateUtils.formatDate(day.epochDay))
                 append("，支出 ")
-                append(visibleYuanText(day.totalCents, amountsHidden))
+                append(amountContentDescription(day.totalCents, amountsHidden))
                 append("，")
                 append(day.transactionCount)
                 append(" 笔")

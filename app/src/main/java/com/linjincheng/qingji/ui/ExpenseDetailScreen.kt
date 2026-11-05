@@ -43,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -142,7 +144,15 @@ fun ExpenseDetailScreen(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
                             ) {
-                                Icon(Icons.Filled.Delete, contentDescription = null)
+                                if (state.isDeleting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.Delete, contentDescription = null)
+                                }
                                 Spacer(Modifier.size(8.dp))
                                 Text(if (state.isDeleting) "正在删除…" else "删除")
                             }
@@ -319,7 +329,15 @@ private fun DetailContent(
                     )
                     Text(
                         text = visibleYuanText(entry.amountCents, amountsHidden),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription = if (amountsHidden) {
+                                    "金额已隐藏"
+                                } else {
+                                    visibleYuanText(entry.amountCents, hidden = false)
+                                }
+                            },
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif,

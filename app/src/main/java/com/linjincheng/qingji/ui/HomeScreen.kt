@@ -371,7 +371,7 @@ private fun HomeMonthPicker(
 internal fun MonthlyOverview(state: HomeUiState, amountsHidden: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f),
         shape = MaterialTheme.shapes.extraLarge,
     ) {
         BoxWithConstraints(
@@ -404,7 +404,14 @@ internal fun MonthlyOverview(state: HomeUiState, amountsHidden: Boolean) {
                         val amountFontSize = (maxWidth.value / 7.2f).coerceIn(25f, 36f).sp
                         Text(
                             text = visibleYuanText(state.totalCents, amountsHidden),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics {
+                                    contentDescription = amountContentDescription(
+                                        state.totalCents,
+                                        amountsHidden,
+                                    )
+                                },
                             maxLines = 2,
                             softWrap = true,
                             overflow = TextOverflow.Clip,
@@ -440,6 +447,19 @@ internal fun MonthlyOverview(state: HomeUiState, amountsHidden: Boolean) {
                                 label = state.comparisonLabel,
                                 amountsHidden = amountsHidden,
                             ),
+                            modifier = Modifier.semantics {
+                                val comparison = monthComparison(
+                                    currentCents = state.comparisonCurrentTotalCents,
+                                    previousCents = state.previousMonthTotalCents,
+                                    label = state.comparisonLabel,
+                                    amountsHidden = amountsHidden,
+                                )
+                                contentDescription = if (amountsHidden) {
+                                    comparison.replace("¥••••", "金额已隐藏")
+                                } else {
+                                    comparison
+                                }
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -475,6 +495,9 @@ private fun monthComparison(
     currentCents > previousCents -> "${label}多 ${visibleYuanText(currentCents - previousCents, amountsHidden)}"
     else -> "${label}少 ${visibleYuanText(previousCents - currentCents, amountsHidden)}"
 }
+
+private fun amountContentDescription(cents: Long, amountsHidden: Boolean): String =
+    if (amountsHidden) "金额已隐藏" else visibleYuanText(cents, hidden = false)
 
 @Composable
 internal fun DailyExpenseTrend(
@@ -526,6 +549,16 @@ internal fun DailyExpenseTrend(
                     !hasSpending -> "暂无消费"
                     else -> "合计 ${visibleYuanText(days.sumOf { it.totalCents }, amountsHidden)}"
                 },
+                modifier = Modifier.semantics {
+                    if (!isLoading && hasSpending) {
+                        val totalCents = days.sumOf { it.totalCents }
+                        contentDescription = if (amountsHidden) {
+                            "合计，金额已隐藏"
+                        } else {
+                            "合计 ${visibleYuanText(totalCents, hidden = false)}"
+                        }
+                    }
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -553,7 +586,7 @@ internal fun DailyExpenseTrend(
                             contentDescription = buildString {
                                 append(DateUtils.formatDate(day.epochDay))
                                 append("，支出 ")
-                                append(visibleYuanText(day.totalCents, amountsHidden))
+                                append(amountContentDescription(day.totalCents, amountsHidden))
                                 append("，")
                                 append(day.transactionCount)
                                 append(" 笔")
@@ -695,7 +728,7 @@ internal fun DailyExpenseTrend(
                                         .padding(vertical = 3.dp)
                                         .semantics(mergeDescendants = true) {
                                             contentDescription = DateUtils.formatDate(day.epochDay) +
-                                                "，支出 " + visibleYuanText(day.totalCents, amountsHidden) +
+                                                "，支出 " + amountContentDescription(day.totalCents, amountsHidden) +
                                                 "，${day.transactionCount} 笔"
                                         },
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -806,7 +839,7 @@ internal fun CategoryShareSection(
                         contentDescription = buildString {
                             append(stat.category.label)
                             append("，")
-                            append(visibleYuanText(stat.totalCents, amountsHidden))
+                            append(amountContentDescription(stat.totalCents, amountsHidden))
                             append("，占本月 ")
                             append(stat.percent)
                             append("%")
@@ -865,7 +898,7 @@ private fun CategoryShareRow(
                 contentDescription = buildString {
                     append(stat.category.label)
                     append("，")
-                    append(visibleYuanText(stat.totalCents, amountsHidden))
+                    append(amountContentDescription(stat.totalCents, amountsHidden))
                     append("，占比 ")
                     append(stat.percent)
                     append("%")
@@ -1070,7 +1103,7 @@ internal fun ExpenseRow(
                 .semantics(mergeDescendants = true) {
                     contentDescription = entry.category.label + "，" +
                         (entry.note.ifBlank { "无备注" }) + "，" +
-                        visibleYuanText(entry.amountCents, amountsHidden) + "，" +
+                        amountContentDescription(entry.amountCents, amountsHidden) + "，" +
                         DateUtils.formatDate(entry.expenseDate)
                 }
                 .padding(horizontal = 2.dp, vertical = 10.dp),
