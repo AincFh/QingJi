@@ -25,6 +25,12 @@ data class ExpenseFilter(
 - 日期、类别、关键词按 AND 相交；空筛选代表全部流水。
 - `ExpenseViewModel` 持有过滤条件和返回上下文。趋势、分类、日历、首页的跳转必须调用同一套入口；详情/编辑/删除后重查同一个过滤结果。
 - `DailyExpenseTotal` 增加 `transactionCount: Int`；零消费日必须有金额 0、笔数 0 的真实数据点。
+- `HomeUiState` 持有 `selectedTrendEpochDay: Long?` 与 `selectedCategory: ExpenseCategory?`；Home/Insights 的可视化选中态由这两个值驱动，并在切换 Tab、进入流水、返回时保留。
+
+## 金额隐藏的产品语义
+
+- `hideAmounts` 隐藏精确货币数值及 TalkBack/tooltip 中的金额文本。
+- 趋势形状、活动密度、分类占比和笔数继续展示为相对消费洞察；设置页应明确说明，避免把金额遮罩误解为完整隐私屏幕。
 
 ## SQLite v2、预算与备份
 
