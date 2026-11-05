@@ -49,6 +49,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,12 +79,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.linjincheng.qingji.R
 import com.linjincheng.qingji.data.ExpenseCategory
 import com.linjincheng.qingji.data.ExpenseEntry
-import com.linjincheng.qingji.ui.components.AmountText
 import com.linjincheng.qingji.ui.components.CategoryIcon
 import com.linjincheng.qingji.ui.components.CategoryIconBadge
 import com.linjincheng.qingji.ui.components.categoryAccent
 import com.linjincheng.qingji.ui.components.visibleYuanText
-import com.linjincheng.qingji.ui.components.yuanText
 import com.linjincheng.qingji.ui.theme.QingJiSpacing
 import com.linjincheng.qingji.util.DateUtils
 import com.linjincheng.qingji.util.DailyExpenseTotal
@@ -110,6 +109,10 @@ fun HomeScreen(
     amountsHidden: Boolean = false,
     onOpenDateDetails: ((Long) -> Unit)? = null,
     onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
+    selectedTrendEpochDay: Long? = null,
+    selectedCategory: ExpenseCategory? = null,
+    onTrendDateSelected: (Long) -> Unit = {},
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit = {},
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -158,6 +161,8 @@ fun HomeScreen(
                         isLoading = state.isLoading,
                         amountsHidden = amountsHidden,
                         onOpenDateDetails = onOpenDateDetails,
+                        selectedTrendEpochDay = selectedTrendEpochDay,
+                        onTrendDateSelected = onTrendDateSelected,
                         title = if (YearMonth.of(state.year, state.month) == YearMonth.now()) {
                             "近 7 天支出"
                         } else {
@@ -171,6 +176,8 @@ fun HomeScreen(
                         amountsHidden = amountsHidden,
                         maxRows = 3,
                         onOpenCategoryDetails = onOpenCategoryDetails,
+                        selectedCategory = selectedCategory,
+                        onSelectedCategoryChanged = onSelectedCategoryChanged,
                     )
                 }
                 item {
@@ -476,10 +483,28 @@ internal fun DailyExpenseTrend(
     amountsHidden: Boolean,
     title: String = "近 7 天支出",
     onOpenDateDetails: ((Long) -> Unit)? = null,
+    selectedTrendEpochDay: Long? = null,
+    onTrendDateSelected: (Long) -> Unit = {},
 ) {
     val hasSpending = days.any { it.totalCents > 0L }
-    var selectedEpochDay by remember(days.firstOrNull()?.epochDay, days.lastOrNull()?.epochDay) {
+    var fallbackSelectedEpochDay by remember(days.firstOrNull()?.epochDay, days.lastOrNull()?.epochDay) {
         mutableStateOf(days.lastOrNull()?.epochDay)
+    }
+    val selectedEpochDay = resolveTrendSelection(
+        days = days,
+        requestedEpochDay = selectedTrendEpochDay ?: fallbackSelectedEpochDay,
+    )
+    LaunchedEffect(selectedTrendEpochDay, days.firstOrNull()?.epochDay, days.lastOrNull()?.epochDay) {
+        selectedEpochDay?.let { resolvedEpochDay ->
+            if (selectedTrendEpochDay != resolvedEpochDay) {
+                fallbackSelectedEpochDay = resolvedEpochDay
+                onTrendDateSelected(resolvedEpochDay)
+            }
+        }
+    }
+    val selectTrendDate: (Long) -> Unit = { epochDay ->
+        fallbackSelectedEpochDay = epochDay
+        onTrendDateSelected(epochDay)
     }
     val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay }
     Column(
@@ -586,14 +611,14 @@ internal fun DailyExpenseTrend(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(60.dp)
-                                .pointerInput(days) {
+                                .pointerInput(days, onTrendDateSelected) {
                                     detectTapGestures { position ->
                                         if (days.isNotEmpty()) {
                                             val pointStep = size.width.toFloat() / days.size
                                             val index = (position.x / pointStep)
                                                 .toInt()
                                                 .coerceIn(days.indices)
-                                            selectedEpochDay = days[index].epochDay
+                                            selectTrendDate(days[index].epochDay)
                                         }
                                     }
                                 }
@@ -654,11 +679,20 @@ internal fun DailyExpenseTrend(
                                     modifier = Modifier
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+                                            },
+                                        )
                                         .selectable(
                                             selected = isSelected,
                                             role = Role.RadioButton,
-                                            onClick = { selectedEpochDay = day.epochDay },
+                                            onClick = { selectTrendDate(day.epochDay) },
                                         )
+                                        .padding(vertical = 3.dp)
                                         .semantics(mergeDescendants = true) {
                                             contentDescription = DateUtils.formatDate(day.epochDay) +
                                                 "，支出 " + visibleYuanText(day.totalCents, amountsHidden) +
@@ -701,9 +735,32 @@ internal fun CategoryShareSection(
     amountsHidden: Boolean,
     maxRows: Int = Int.MAX_VALUE,
     onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
+    selectedCategory: ExpenseCategory? = null,
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit = {},
 ) {
-    val positiveStats = state.categoryStats.filter { it.totalCents > 0L }.take(maxRows)
-    var selectedCategory by remember(state.year, state.month) { mutableStateOf<ExpenseCategory?>(null) }
+    val allPositiveStats = state.categoryStats.filter { it.totalCents > 0L }
+    var fallbackSelectedCategory by remember(state.year, state.month) {
+        mutableStateOf(allPositiveStats.firstOrNull()?.category)
+    }
+    val resolvedSelectedCategory = resolveCategorySelection(
+        availableCategories = allPositiveStats.map(CategoryStat::category),
+        requestedCategory = selectedCategory ?: fallbackSelectedCategory,
+    )
+    LaunchedEffect(selectedCategory, state.year, state.month, allPositiveStats) {
+        if (selectedCategory != resolvedSelectedCategory) {
+            fallbackSelectedCategory = resolvedSelectedCategory
+            onSelectedCategoryChanged(resolvedSelectedCategory)
+        }
+    }
+    val topStats = allPositiveStats.take(maxRows.coerceAtLeast(0))
+    val selectedStat = allPositiveStats.firstOrNull { it.category == resolvedSelectedCategory }
+    val positiveStats = if (
+        selectedStat != null && selectedStat !in topStats && maxRows > 0 && topStats.isNotEmpty()
+    ) {
+        topStats.dropLast(1) + selectedStat
+    } else {
+        topStats
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -733,12 +790,15 @@ internal fun CategoryShareSection(
                 CategoryShareRow(
                     stat = stat,
                     amountsHidden = amountsHidden,
-                    selected = stat.category == selectedCategory,
-                    onSelect = { selectedCategory = stat.category },
+                    selected = stat.category == resolvedSelectedCategory,
+                    onSelect = {
+                        fallbackSelectedCategory = stat.category
+                        onSelectedCategoryChanged(stat.category)
+                    },
                 )
             }
         }
-        positiveStats.firstOrNull { it.category == selectedCategory }?.let { stat ->
+        positiveStats.firstOrNull { it.category == resolvedSelectedCategory }?.let { stat ->
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()

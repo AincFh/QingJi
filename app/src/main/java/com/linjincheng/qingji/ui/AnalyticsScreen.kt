@@ -38,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,10 @@ fun InsightsScreen(
     amountsHidden: Boolean,
     onOpenDateDetails: ((Long) -> Unit)? = null,
     onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
+    selectedTrendEpochDay: Long? = null,
+    selectedCategory: ExpenseCategory? = null,
+    onTrendDateSelected: (Long) -> Unit = {},
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit = {},
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
     val selectedMonth = remember(state.year, state.month) {
@@ -155,6 +160,8 @@ fun InsightsScreen(
                                         state = state,
                                         amountsHidden = amountsHidden,
                                         onOpenCategoryDetails = onOpenCategoryDetails,
+                                        selectedCategory = selectedCategory,
+                                        onSelectedCategoryChanged = onSelectedCategoryChanged,
                                     )
                                 }
 
@@ -163,6 +170,8 @@ fun InsightsScreen(
                                     selectedMonth = selectedMonth,
                                     amountsHidden = amountsHidden,
                                     onOpenDateDetails = onOpenDateDetails,
+                                    selectedTrendEpochDay = selectedTrendEpochDay,
+                                    onTrendDateSelected = onTrendDateSelected,
                                 )
 
                                 else -> ComparisonSummary(
@@ -595,13 +604,25 @@ private fun CategoryBreakdown(
     state: HomeUiState,
     amountsHidden: Boolean,
     onOpenCategoryDetails: ((ExpenseCategory) -> Unit)?,
+    selectedCategory: ExpenseCategory?,
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit,
 ) {
-    var selectedCategory by remember(state.year, state.month) {
-        mutableStateOf<ExpenseCategory?>(null)
-    }
     val categories = state.categoryStats
         .filter { it.totalCents > 0L }
         .sortedByDescending(CategoryStat::totalCents)
+    var fallbackSelectedCategory by remember(state.year, state.month) {
+        mutableStateOf(categories.firstOrNull()?.category)
+    }
+    val resolvedSelectedCategory = resolveCategorySelection(
+        availableCategories = categories.map(CategoryStat::category),
+        requestedCategory = selectedCategory ?: fallbackSelectedCategory,
+    )
+    LaunchedEffect(selectedCategory, state.year, state.month, state.hasLoaded, categories) {
+        if (state.hasLoaded && selectedCategory != resolvedSelectedCategory) {
+            fallbackSelectedCategory = resolvedSelectedCategory
+            onSelectedCategoryChanged(resolvedSelectedCategory)
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs)) {
         SectionHeading(
@@ -632,8 +653,11 @@ private fun CategoryBreakdown(
                         CategoryBreakdownRow(
                             stat = stat,
                             amountsHidden = amountsHidden,
-                            selected = selectedCategory == stat.category,
-                            onSelect = { selectedCategory = stat.category },
+                            selected = resolvedSelectedCategory == stat.category,
+                            onSelect = {
+                                fallbackSelectedCategory = stat.category
+                                onSelectedCategoryChanged(stat.category)
+                            },
                         )
                         if (index != categories.lastIndex) {
                             androidx.compose.material3.HorizontalDivider(
@@ -643,7 +667,7 @@ private fun CategoryBreakdown(
                     }
                 }
             }
-            categories.firstOrNull { it.category == selectedCategory }?.let { stat ->
+            categories.firstOrNull { it.category == resolvedSelectedCategory }?.let { stat ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -789,17 +813,41 @@ private fun ExpenseTrend(
     selectedMonth: YearMonth,
     amountsHidden: Boolean,
     onOpenDateDetails: ((Long) -> Unit)?,
+    selectedTrendEpochDay: Long?,
+    onTrendDateSelected: (Long) -> Unit,
 ) {
     var selectedDayCount by rememberSaveable { mutableIntStateOf(7) }
     val isCurrentMonth = selectedMonth == YearMonth.now()
     val days = if (selectedDayCount == 7) state.dailyTrend else state.dailyTrend30
-    var selectedEpochDay by rememberSaveable(
+    var fallbackSelectedEpochDay by rememberSaveable(
         selectedMonth.toString(),
         selectedDayCount,
         days.firstOrNull()?.epochDay ?: 0L,
         days.lastOrNull()?.epochDay ?: 0L,
     ) { mutableStateOf<Long?>(days.lastOrNull()?.epochDay) }
-    val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay } ?: days.firstOrNull()
+    val selectedEpochDay = resolveTrendSelection(
+        days = days,
+        requestedEpochDay = selectedTrendEpochDay ?: fallbackSelectedEpochDay,
+    )
+    LaunchedEffect(
+        selectedTrendEpochDay,
+        selectedDayCount,
+        selectedMonth,
+        days.firstOrNull()?.epochDay,
+        days.lastOrNull()?.epochDay,
+    ) {
+        selectedEpochDay?.let { resolvedEpochDay ->
+            if (selectedTrendEpochDay != resolvedEpochDay) {
+                fallbackSelectedEpochDay = resolvedEpochDay
+                onTrendDateSelected(resolvedEpochDay)
+            }
+        }
+    }
+    val selectTrendDate: (Long) -> Unit = { epochDay ->
+        fallbackSelectedEpochDay = epochDay
+        onTrendDateSelected(epochDay)
+    }
+    val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay }
     val title = when {
         isCurrentMonth && selectedDayCount == 7 -> "近 7 天趋势"
         isCurrentMonth -> "近 30 天趋势"
@@ -824,7 +872,7 @@ private fun ExpenseTrend(
                 append(" · 金额已隐藏")
             } else {
                 append(" · 合计 ")
-                append(visibleYuanText(total, false))
+                append(visibleYuanText(total, amountsHidden))
             }
         }
     } else {
@@ -865,7 +913,7 @@ private fun ExpenseTrend(
                 days = days,
                 amountsHidden = amountsHidden,
                 selectedEpochDay = selectedDay?.epochDay,
-                onSelectDate = { selectedEpochDay = it },
+                onSelectDate = selectTrendDate,
             )
             selectedDay?.let { day ->
                 SelectedDaySummary(
@@ -878,7 +926,7 @@ private fun ExpenseTrend(
                 days = days,
                 selectedEpochDay = selectedDay?.epochDay,
                 amountsHidden = amountsHidden,
-                onSelect = { selectedEpochDay = it },
+                onSelect = selectTrendDate,
             )
         }
     }
@@ -912,7 +960,7 @@ private fun TrendChart(
             val peakText = when {
                 peak == null || maxCents <= 0L -> "暂无消费"
                 amountsHidden -> "最高消费日 ${DateUtils.formatDate(peak.epochDay)}"
-                else -> "最高 ${DateUtils.formatDate(peak.epochDay)} · ${visibleYuanText(maxCents, false)}"
+                else -> "最高 ${DateUtils.formatDate(peak.epochDay)} · ${visibleYuanText(maxCents, amountsHidden)}"
             }
             Text(
                 text = peakText,
