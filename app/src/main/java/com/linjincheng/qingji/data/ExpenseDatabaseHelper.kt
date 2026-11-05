@@ -62,7 +62,11 @@ class ExpenseDatabaseHelper(
         const val COL_UPDATED_AT = "updated_at"
         const val COL_BACKUP_ID = "backup_id"
 
-        /** Expenses schema for a fresh v2 database. */
+        /**
+         * Expenses schema for a fresh v2 database. backup_id is nullable at the SQLite layer so
+         * its declaration matches the v1 ALTER TABLE migration without rebuilding the ledger;
+         * repository writes validate and persist a canonical UUID for every inserted expense.
+         */
         const val SQL_CREATE_EXPENSES = """CREATE TABLE expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
@@ -71,7 +75,7 @@ class ExpenseDatabaseHelper(
     expense_date INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    backup_id TEXT NOT NULL
+    backup_id TEXT
 )"""
 
         const val SQL_CREATE_INDEX = "CREATE INDEX idx_expenses_date ON expenses(expense_date)"

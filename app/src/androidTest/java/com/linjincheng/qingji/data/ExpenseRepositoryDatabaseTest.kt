@@ -48,8 +48,14 @@ class ExpenseRepositoryDatabaseTest {
         assertTrue(tableExists(db, ExpenseDatabaseHelper.TABLE_EXPENSES))
         assertTrue(tableExists(db, ExpenseDatabaseHelper.TABLE_MONTHLY_BUDGETS))
         assertTrue(columnExists(db, ExpenseDatabaseHelper.TABLE_EXPENSES, ExpenseDatabaseHelper.COL_BACKUP_ID))
+        val backupIdColumn = expenseSchema(db).single { it.name == ExpenseDatabaseHelper.COL_BACKUP_ID }
+        assertEquals("TEXT", backupIdColumn.type)
+        assertEquals(0, backupIdColumn.notNull)
+        assertNull(backupIdColumn.defaultValue)
+        assertEquals(0, backupIdColumn.primaryKeyOrder)
         assertTrue(indexExists(db, "idx_expenses_date"))
         assertTrue(indexExists(db, "idx_expenses_backup_id"))
+        assertTrue(indexIsUnique(db, "idx_expenses_backup_id"))
     }
 
     @Test
@@ -64,6 +70,20 @@ class ExpenseRepositoryDatabaseTest {
         val db = helper!!.writableDatabase
 
         assertEquals(2, db.version)
+        val freshDatabaseName = "qingji_v6_schema_reference_${UUID.randomUUID()}.db"
+        val freshHelper = ExpenseDatabaseHelper(context, freshDatabaseName)
+        try {
+            val freshDb = freshHelper.writableDatabase
+            assertEquals(expenseSchema(freshDb), expenseSchema(db))
+            val backupIdColumn = expenseSchema(db).single { it.name == ExpenseDatabaseHelper.COL_BACKUP_ID }
+            assertEquals("TEXT", backupIdColumn.type)
+            assertEquals(0, backupIdColumn.notNull)
+            assertNull(backupIdColumn.defaultValue)
+            assertEquals(0, backupIdColumn.primaryKeyOrder)
+        } finally {
+            freshHelper.close()
+            context.deleteDatabase(freshDatabaseName)
+        }
         val migrated = db.query(
             ExpenseDatabaseHelper.TABLE_EXPENSES,
             arrayOf("id", "amount_cents", "category", "note", "expense_date", "created_at", "updated_at", "backup_id"),
@@ -98,10 +118,44 @@ class ExpenseRepositoryDatabaseTest {
             ),
             migrated.map { it.first },
         )
+        assertTrue(migrated.all { it.second.isNotBlank() })
+        assertEquals(migrated.size, migrated.map { it.second }.toSet().size)
         migrated.forEach { (_, backupId) -> assertEquals(backupId, UUID.fromString(backupId).toString()) }
         assertNotEquals(migrated[0].second, migrated[1].second)
         assertTrue(indexExists(db, "idx_expenses_date"))
+        assertTrue(indexExists(db, "idx_expenses_backup_id"))
+        assertTrue(indexIsUnique(db, "idx_expenses_backup_id"))
         assertTrue(tableExists(db, ExpenseDatabaseHelper.TABLE_MONTHLY_BUDGETS))
+    }
+
+    @Test
+    fun repositoryWritesUniqueBackupIdsAndEditingKeepsIdentity() = runBlocking {
+        helper = ExpenseDatabaseHelper(context, databaseName)
+        val repository = ExpenseRepositoryImpl(helper!!)
+        val firstEntry = entry(1_200L, 20_000L)
+        val secondEntry = entry(2_300L, 20_001L)
+
+        val firstId = repository.insertExpense(firstEntry)
+        val secondId = repository.insertExpense(secondEntry)
+        val firstStored = repository.getExpenseById(firstId)!!
+        val secondStored = repository.getExpenseById(secondId)!!
+
+        assertEquals(firstEntry.backupId, firstStored.backupId)
+        assertEquals(UUID.fromString(firstStored.backupId).toString(), firstStored.backupId)
+        assertEquals(UUID.fromString(secondStored.backupId).toString(), secondStored.backupId)
+        assertNotEquals(firstStored.backupId, secondStored.backupId)
+
+        val editedValues = firstStored.copy(
+            amountCents = 1_500L,
+            note = "edited",
+            updatedAt = 3L,
+            backupId = UUID.randomUUID().toString(),
+        )
+        assertTrue(repository.updateExpense(editedValues))
+        val edited = repository.getExpenseById(firstId)!!
+        assertEquals(1_500L, edited.amountCents)
+        assertEquals("edited", edited.note)
+        assertEquals(firstStored.backupId, edited.backupId)
     }
 
     @Test
@@ -257,6 +311,49 @@ class ExpenseRepositoryDatabaseTest {
             while (cursor.moveToNext()) if (cursor.getString(nameColumn) == column) return@use true
             false
         }
+
+    private fun expenseSchema(db: SQLiteDatabase): List<ExpenseColumnInfo> =
+        db.rawQuery("PRAGMA table_info(${ExpenseDatabaseHelper.TABLE_EXPENSES})", null).use { cursor ->
+            val cidColumn = cursor.getColumnIndexOrThrow("cid")
+            val nameColumn = cursor.getColumnIndexOrThrow("name")
+            val typeColumn = cursor.getColumnIndexOrThrow("type")
+            val notNullColumn = cursor.getColumnIndexOrThrow("notnull")
+            val defaultColumn = cursor.getColumnIndexOrThrow("dflt_value")
+            val primaryKeyColumn = cursor.getColumnIndexOrThrow("pk")
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        ExpenseColumnInfo(
+                            cid = cursor.getInt(cidColumn),
+                            name = cursor.getString(nameColumn),
+                            type = cursor.getString(typeColumn),
+                            notNull = cursor.getInt(notNullColumn),
+                            defaultValue = if (cursor.isNull(defaultColumn)) null else cursor.getString(defaultColumn),
+                            primaryKeyOrder = cursor.getInt(primaryKeyColumn),
+                        ),
+                    )
+                }
+            }
+        }
+
+    private fun indexIsUnique(db: SQLiteDatabase, index: String): Boolean =
+        db.rawQuery("PRAGMA index_list(${ExpenseDatabaseHelper.TABLE_EXPENSES})", null).use { cursor ->
+            val nameColumn = cursor.getColumnIndexOrThrow("name")
+            val uniqueColumn = cursor.getColumnIndexOrThrow("unique")
+            while (cursor.moveToNext()) {
+                if (cursor.getString(nameColumn) == index) return@use cursor.getInt(uniqueColumn) == 1
+            }
+            false
+        }
+
+    private data class ExpenseColumnInfo(
+        val cid: Int,
+        val name: String,
+        val type: String,
+        val notNull: Int,
+        val defaultValue: String?,
+        val primaryKeyOrder: Int,
+    )
 
     private data class LegacyExpense(
         val id: Long,

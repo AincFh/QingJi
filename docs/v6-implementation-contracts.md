@@ -35,7 +35,7 @@ data class ExpenseFilter(
 ## SQLite v2、预算与备份
 
 - 主数据仍在 SQLite。`ExpenseEntry.amountCents` 为整数分，日期为本地 `LocalDate.toEpochDay()`。
-- v1→v2 仅允许 ADD COLUMN、建新表和索引，不删表、不重建 `expenses`。迁移必须保留旧记录 id、金额、分类、备注、日期和时间戳。备份身份 `backup_id` 为稳定 UUID，新记录和导入记录都写入；编辑不改 UUID。
+- v1→v2 仅允许 ADD COLUMN、建新表和索引，不删表、不重建 `expenses`。迁移必须保留旧记录 id、金额、分类、备注、日期和时间戳。SQLite 的 `backup_id` 列与迁移保持同一可空声明；Repository 写入时强制稳定 UUID，新记录和导入记录都写入，编辑不改 UUID。
 - `monthly_budgets` 主键为 `(year, month)`，金额为非负整数分。无行=未设置；存在且金额为 0=用户明确设为零预算。实际已用金额始终由当月流水 SUM 计算，不缓存。
 - Calendar 查询返回日期、总分、笔数；由界面层补齐空日期。
 - JSON 备份包含 `schemaVersion`、`exportedAt`、`appVersion`、消费记录和每月预算；不导出设备信息或主题/隐私偏好。只通过 SAF 文件选择器，不申请宽泛存储权限。
