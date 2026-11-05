@@ -88,7 +88,7 @@ fun RecordsScreen(
     val resultTotalCents = remember(state.entries) { state.entries.sumOf(ExpenseEntry::amountCents) }
     val hasActiveFilter = state.searchText.isNotBlank() ||
         state.categoryFilter != null ||
-        state.historyMonthFilter != null
+        state.expenseFilter.dateRange != null
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         LazyColumn(
@@ -144,6 +144,24 @@ fun RecordsScreen(
                         onSearch = { defaultKeyboardAction(ImeAction.Search) },
                     ),
                 )
+            }
+
+            if (state.expenseFilter.dateRange != null && state.historyMonthFilter == null) {
+                item {
+                    FilterChip(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        selected = true,
+                        onClick = { onMonthFilterChange(null) },
+                        label = { Text("日期 · ${state.activeDateFilterLabel}") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                    )
+                }
             }
 
             item {
@@ -215,7 +233,7 @@ fun RecordsScreen(
                         item(key = "history-month-all") {
                             MonthFilterChip(
                                 label = "全部月份",
-                                selected = state.historyMonthFilter == null,
+                                selected = state.expenseFilter.dateRange == null,
                                 onClick = { onMonthFilterChange(null) },
                             )
                         }
@@ -451,6 +469,7 @@ private fun CategoryFilterChip(
     onClick: () -> Unit,
 ) {
     FilterChip(
+        modifier = Modifier.heightIn(min = 48.dp),
         selected = selected,
         onClick = onClick,
         label = { Text(label, maxLines = 1) },
@@ -481,6 +500,7 @@ private fun MonthFilterChip(
     onClick: () -> Unit,
 ) {
     FilterChip(
+        modifier = Modifier.heightIn(min = 48.dp),
         selected = selected,
         onClick = onClick,
         label = { Text(label, maxLines = 1) },

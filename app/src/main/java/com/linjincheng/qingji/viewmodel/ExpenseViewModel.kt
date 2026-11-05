@@ -13,6 +13,8 @@ import com.linjincheng.qingji.util.AmountParseResult
 import com.linjincheng.qingji.util.DateUtils
 import com.linjincheng.qingji.util.DailyExpenseTotal
 import com.linjincheng.qingji.util.ExpenseAnalytics
+import com.linjincheng.qingji.util.ExpenseFilter
+import com.linjincheng.qingji.util.EpochDayRange
 import com.linjincheng.qingji.util.MoneyUtils
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -58,16 +60,20 @@ data class HomeUiState(
     val comparisonLabel: String = "较上月",
     val dailyTrend: List<DailyExpenseTotal> = emptyList(),
     val dailyTrend30: List<DailyExpenseTotal> = emptyList(),
-    val searchText: String = "",
-    val categoryFilter: ExpenseCategory? = null,
-    val historyMonthFilter: YearMonth? = null,
+    val expenseFilter: ExpenseFilter = ExpenseFilter(),
     val historyMonthOptions: List<YearMonth> = emptyList(),
     val hasMonthEntries: Boolean = false,
     val monthEntryCount: Int = 0,
     val loadFailed: Boolean = false,
     val feedbackMessage: String? = null,
     val hasLoaded: Boolean = false,
-)
+) {
+    /** Compatibility projections for existing screen APIs; expenseFilter remains the source of truth. */
+    val searchText: String get() = expenseFilter.keyword
+    val categoryFilter: ExpenseCategory? get() = expenseFilter.category
+    val historyMonthFilter: YearMonth? get() = expenseFilter.dateRange?.asYearMonthOrNull()
+    val activeDateFilterLabel: String? get() = expenseFilter.dateRange?.label()
+}
 
 /** 表单状态：amountError 存稳定原因键（同 AmountParseResult.reason），由界面映射中文。 */
 data class FormUiState(
@@ -200,20 +206,7 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
 
     /** 搜索备注、分类、日期或金额文本；有搜索/筛选时在全部历史流水中匹配。 */
     fun onSearchTextChange(text: String) {
-        _home.update { current ->
-            val useAllHistory = current.showAllHistory || text.isNotBlank() ||
-                current.categoryFilter != null || current.historyMonthFilter != null
-            current.copy(
-                searchText = text,
-                showAllHistory = useAllHistory,
-                entries = ExpenseAnalytics.filterEntries(
-                    if (useAllHistory) allEntries else monthEntries,
-                    text,
-                    current.categoryFilter,
-                    current.historyMonthFilter,
-                ),
-            )
-        }
+        setExpenseFilter(_home.value.expenseFilter.copy(keyword = text))
     }
 
     fun retryHome() {
@@ -230,56 +223,56 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
 
     /** 单分类筛选；传 null 清除筛选。 */
     fun onCategoryFilterChange(category: ExpenseCategory?) {
-        _home.update { current ->
-            val useAllHistory = current.showAllHistory || current.searchText.isNotBlank() ||
-                category != null || current.historyMonthFilter != null
-            current.copy(
-                categoryFilter = category,
-                showAllHistory = useAllHistory,
-                entries = ExpenseAnalytics.filterEntries(
-                    if (useAllHistory) allEntries else monthEntries,
-                    current.searchText,
-                    category,
-                    current.historyMonthFilter,
-                ),
-            )
-        }
+        setExpenseFilter(_home.value.expenseFilter.copy(category = category))
     }
 
     /** 账单页月份过滤；条件保存在 ViewModel 中，返回详情时不会丢失。 */
     fun onHistoryMonthFilterChange(month: YearMonth?) {
-        _home.update { current ->
-            val useAllHistory = current.showAllHistory || current.searchText.isNotBlank() ||
-                current.categoryFilter != null || month != null
-            current.copy(
-                historyMonthFilter = month,
-                showAllHistory = useAllHistory,
-                entries = ExpenseAnalytics.filterEntries(
-                    if (useAllHistory) allEntries else monthEntries,
-                    current.searchText,
-                    current.categoryFilter,
-                    month,
-                ),
-            )
-        }
+        setExpenseFilter(
+            _home.value.expenseFilter.copy(dateRange = month?.let(EpochDayRange::month)),
+        )
+    }
+
+    /** 日历或图表将同一套日期/类别/关键词条件带入全历史账单。 */
+    fun openFilteredLedger(filter: ExpenseFilter) {
+        setExpenseFilter(filter, forceAllHistory = true)
+    }
+
+    fun onExpenseDateRangeChange(range: EpochDayRange?) {
+        setExpenseFilter(_home.value.expenseFilter.copy(dateRange = range))
+    }
+
+    fun clearExpenseFilter() {
+        setExpenseFilter(ExpenseFilter())
     }
 
     /** 全流水页按全历史展示；离开后无筛选时首页状态恢复按月范围，已有筛选保持。 */
     fun onHistoryTabSelected(showAllHistory: Boolean) {
         _home.update { current ->
-            val useAllHistory = showAllHistory || current.searchText.isNotBlank() ||
-                current.categoryFilter != null || current.historyMonthFilter != null
+            val useAllHistory = showAllHistory || !current.expenseFilter.isEmpty
             current.copy(
                 showAllHistory = showAllHistory,
-                entries = ExpenseAnalytics.filterEntries(
-                    if (useAllHistory) allEntries else monthEntries,
-                    current.searchText,
-                    current.categoryFilter,
-                    current.historyMonthFilter,
-                ),
+                entries = filteredEntries(current.expenseFilter, useAllHistory),
             )
         }
     }
+
+    private fun setExpenseFilter(filter: ExpenseFilter, forceAllHistory: Boolean = false) {
+        _home.update { current ->
+            val useAllHistory = forceAllHistory || current.showAllHistory || !filter.isEmpty
+            current.copy(
+                expenseFilter = filter,
+                showAllHistory = current.showAllHistory || forceAllHistory,
+                entries = filteredEntries(filter, useAllHistory),
+                historyMonthOptions = (
+                    ExpenseAnalytics.availableMonths(allEntries) + listOfNotNull(filter.dateRange?.asYearMonthOrNull())
+                ).distinct().sortedDescending(),
+            )
+        }
+    }
+
+    private fun filteredEntries(filter: ExpenseFilter, useAllHistory: Boolean): List<ExpenseEntry> =
+        filter.apply(if (useAllHistory) allEntries else monthEntries)
 
     /** 切月：只改查询条件并重算统计，不写库。 */
     fun changeMonth(delta: Int) {
@@ -594,22 +587,16 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
 
             monthEntries = result.entries
             allEntries = result.allEntries
-            val useAllHistory = current.showAllHistory ||
-                current.searchText.isNotBlank() || current.categoryFilter != null ||
-                current.historyMonthFilter != null
+            val useAllHistory = current.showAllHistory || !current.expenseFilter.isEmpty
             _home.value = current.copy(
                 totalCents = result.totalCents,
                 categoryStats = buildCategoryStats(result.categoryTotals),
-                entries = ExpenseAnalytics.filterEntries(
-                    entries = if (useAllHistory) result.allEntries else result.entries,
-                    searchText = current.searchText,
-                    categoryFilter = current.categoryFilter,
-                    monthFilter = current.historyMonthFilter,
-                ),
+                entries = current.expenseFilter.apply(if (useAllHistory) result.allEntries else result.entries),
                 recentEntries = result.entries,
                 hasAnyEntries = result.allEntries.isNotEmpty(),
                 historyMonthOptions = (
-                    ExpenseAnalytics.availableMonths(result.allEntries) + listOfNotNull(current.historyMonthFilter)
+                    ExpenseAnalytics.availableMonths(result.allEntries) +
+                        listOfNotNull(current.expenseFilter.dateRange?.asYearMonthOrNull())
                 ).distinct().sortedDescending(),
                 previousMonthTotalCents = result.previousMonthTotalCents,
                 comparisonCurrentTotalCents = result.comparisonCurrentTotalCents,
