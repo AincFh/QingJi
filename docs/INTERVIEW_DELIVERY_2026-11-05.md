@@ -1,3 +1,5 @@
+![轻记 QingJi v6 项目视觉概览](../assets/qingji-v6-project-card.svg)
+
 # 轻记 QingJi v6｜Native 开发岗位评估交接
 
 > 日期：2026-11-05 · 项目：Android 原生离线个人消费记账 App · 用途：面试评估原型（非应用商店正式发行）
