@@ -26,6 +26,7 @@ class ExpenseAnalyticsTest {
         assertEquals(7, totals.size)
         assertEquals((0L..6L).map { startDay + it }, totals.map { it.epochDay })
         assertEquals(listOf(125L, 0L, 75L, 0L, 0L, 300L, 0L), totals.map { it.totalCents })
+        assertEquals(listOf(1, 0, 1, 0, 0, 1, 0), totals.map { it.transactionCount })
     }
 
     @Test
@@ -36,6 +37,24 @@ class ExpenseAnalyticsTest {
 
         assertEquals(7, totals.size)
         assertEquals(List(7) { 0L }, totals.map { it.totalCents })
+        assertEquals(List(7) { 0 }, totals.map { it.transactionCount })
+    }
+
+    @Test
+    fun dailyTotalsCountMultipleEntriesAndIgnoreDatesOutsideTheWindow() {
+        val firstDay = LocalDate.of(2026, 6, 10).toEpochDay()
+        val entries = listOf(
+            entry(1L, 125L, firstDay),
+            entry(2L, 75L, firstDay),
+            entry(3L, 300L, firstDay + 1L),
+            entry(4L, 999L, firstDay - 1L),
+            entry(5L, 888L, firstDay + 3L),
+        )
+
+        val totals = ExpenseAnalytics.dailyTotals(entries, endEpochDay = firstDay + 2L, dayCount = 3)
+
+        assertEquals(listOf(200L, 300L, 0L), totals.map { it.totalCents })
+        assertEquals(listOf(2, 1, 0), totals.map { it.transactionCount })
     }
 
     @Test
@@ -64,6 +83,10 @@ class ExpenseAnalyticsTest {
                 }
             },
             totals.map { it.totalCents },
+        )
+        assertEquals(
+            List(30) { index -> if (index == 0 || index == 14 || index == 29) 1 else 0 },
+            totals.map { it.transactionCount },
         )
     }
 

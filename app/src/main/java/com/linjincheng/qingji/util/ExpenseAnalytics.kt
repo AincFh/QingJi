@@ -8,7 +8,11 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /** 单日趋势点；epochDay 使用 LocalDate.toEpochDay()，金额单位为分。 */
-data class DailyExpenseTotal(val epochDay: Long, val totalCents: Long)
+data class DailyExpenseTotal(
+    val epochDay: Long,
+    val totalCents: Long,
+    val transactionCount: Int = 0,
+)
 
 data class MonthComparison(
     val currentCents: Long,
@@ -113,16 +117,19 @@ object ExpenseAnalytics {
         require(dayCount > 0) { "dayCount must be positive" }
         val firstEpochDay = endEpochDay - (dayCount - 1).toLong()
         val totals = LongArray(dayCount)
+        val transactionCounts = IntArray(dayCount)
         entries.forEach { entry ->
             val offset = entry.expenseDate - firstEpochDay
             if (offset in 0L until dayCount.toLong()) {
                 totals[offset.toInt()] += entry.amountCents
+                transactionCounts[offset.toInt()]++
             }
         }
         return (0 until dayCount).map { index ->
             DailyExpenseTotal(
                 epochDay = firstEpochDay + index,
                 totalCents = totals[index],
+                transactionCount = transactionCounts[index],
             )
         }
     }

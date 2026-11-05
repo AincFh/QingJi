@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
 import com.linjincheng.qingji.R
 import com.linjincheng.qingji.data.ExpenseCategory
 import com.linjincheng.qingji.data.ExpenseEntry
@@ -106,6 +108,8 @@ fun HomeScreen(
     onOpenAllRecords: () -> Unit,
     onRetryHome: () -> Unit = {},
     amountsHidden: Boolean = false,
+    onOpenDateDetails: ((Long) -> Unit)? = null,
+    onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -153,6 +157,7 @@ fun HomeScreen(
                         days = state.dailyTrend,
                         isLoading = state.isLoading,
                         amountsHidden = amountsHidden,
+                        onOpenDateDetails = onOpenDateDetails,
                         title = if (YearMonth.of(state.year, state.month) == YearMonth.now()) {
                             "近 7 天支出"
                         } else {
@@ -160,7 +165,14 @@ fun HomeScreen(
                         },
                     )
                 }
-                item { CategoryShareSection(state = state, amountsHidden = amountsHidden, maxRows = 3) }
+                item {
+                    CategoryShareSection(
+                        state = state,
+                        amountsHidden = amountsHidden,
+                        maxRows = 3,
+                        onOpenCategoryDetails = onOpenCategoryDetails,
+                    )
+                }
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -463,10 +475,11 @@ internal fun DailyExpenseTrend(
     isLoading: Boolean,
     amountsHidden: Boolean,
     title: String = "近 7 天支出",
+    onOpenDateDetails: ((Long) -> Unit)? = null,
 ) {
     val hasSpending = days.any { it.totalCents > 0L }
     var selectedEpochDay by remember(days.firstOrNull()?.epochDay, days.lastOrNull()?.epochDay) {
-        mutableStateOf<Long?>(null)
+        mutableStateOf(days.lastOrNull()?.epochDay)
     }
     val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay }
     Column(
@@ -493,19 +506,70 @@ internal fun DailyExpenseTrend(
             )
         }
 
-        if (days.isEmpty() || !hasSpending) {
+        if (days.isEmpty()) {
             Text(
-                text = if (isLoading) "正在读取趋势…" else "这段时间还没有支出，记下一笔后会显示每日变化",
+                text = if (isLoading) "正在读取趋势…" else "暂无可展示的日期数据",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            selectedDay?.let { day ->
+            if (!hasSpending) {
                 Text(
-                    text = "${DateUtils.formatDate(day.epochDay)} · 支出 ${visibleYuanText(day.totalCents, amountsHidden)}",
+                    text = if (isLoading) "正在读取趋势…" else "这段时间还没有消费记录，可选择任一天查看",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            selectedDay?.let { day ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = buildString {
+                                append(DateUtils.formatDate(day.epochDay))
+                                append("，支出 ")
+                                append(visibleYuanText(day.totalCents, amountsHidden))
+                                append("，")
+                                append(day.transactionCount)
+                                append(" 笔")
+                            }
+                        },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = QingJiSpacing.sm, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = DateUtils.formatDate(day.epochDay),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Text(
+                                text = "${visibleYuanText(day.totalCents, amountsHidden)} · ${day.transactionCount} 笔",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        if (onOpenDateDetails != null) {
+                            TextButton(
+                                onClick = { onOpenDateDetails(day.epochDay) },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
+                                Text("查看流水")
+                            }
+                        }
+                    }
+                }
             }
             val maxCents = days.maxOfOrNull { it.totalCents.coerceAtLeast(0L) } ?: 0L
             val maxIndex = if (maxCents > 0L) days.indexOfLast { it.totalCents == maxCents } else -1
@@ -522,8 +586,19 @@ internal fun DailyExpenseTrend(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(60.dp)
+                                .pointerInput(days) {
+                                    detectTapGestures { position ->
+                                        if (days.isNotEmpty()) {
+                                            val pointStep = size.width.toFloat() / days.size
+                                            val index = (position.x / pointStep)
+                                                .toInt()
+                                                .coerceIn(days.indices)
+                                            selectedEpochDay = days[index].epochDay
+                                        }
+                                    }
+                                }
                                 .semantics {
-                                    contentDescription = "$title 趋势图；逐日金额可在下方日期中查看"
+                                    contentDescription = "$title 趋势图；逐日日期和笔数可在下方选择查看"
                                 },
                         ) {
                             val baseY = size.height - 7.dp.toPx()
@@ -586,7 +661,8 @@ internal fun DailyExpenseTrend(
                                         )
                                         .semantics(mergeDescendants = true) {
                                             contentDescription = DateUtils.formatDate(day.epochDay) +
-                                                "，支出 " + visibleYuanText(day.totalCents, amountsHidden)
+                                                "，支出 " + visibleYuanText(day.totalCents, amountsHidden) +
+                                                "，${day.transactionCount} 笔"
                                         },
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
@@ -624,8 +700,10 @@ internal fun CategoryShareSection(
     state: HomeUiState,
     amountsHidden: Boolean,
     maxRows: Int = Int.MAX_VALUE,
+    onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
 ) {
     val positiveStats = state.categoryStats.filter { it.totalCents > 0L }.take(maxRows)
+    var selectedCategory by remember(state.year, state.month) { mutableStateOf<ExpenseCategory?>(null) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -650,15 +728,92 @@ internal fun CategoryShareSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        positiveStats.forEach { stat ->
-            CategoryShareRow(stat = stat, amountsHidden = amountsHidden)
+        Column(modifier = Modifier.selectableGroup()) {
+            positiveStats.forEach { stat ->
+                CategoryShareRow(
+                    stat = stat,
+                    amountsHidden = amountsHidden,
+                    selected = stat.category == selectedCategory,
+                    onSelect = { selectedCategory = stat.category },
+                )
+            }
+        }
+        positiveStats.firstOrNull { it.category == selectedCategory }?.let { stat ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = buildString {
+                            append(stat.category.label)
+                            append("，")
+                            append(visibleYuanText(stat.totalCents, amountsHidden))
+                            append("，占本月 ")
+                            append(stat.percent)
+                            append("%")
+                        }
+                    },
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = QingJiSpacing.sm, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${stat.category.label} · ${visibleYuanText(stat.totalCents, amountsHidden)} · ${stat.percent}%",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (onOpenCategoryDetails != null) {
+                        TextButton(
+                            onClick = { onOpenCategoryDetails(stat.category) },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text("查看流水")
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun CategoryShareRow(stat: CategoryStat, amountsHidden: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+private fun CategoryShareRow(
+    stat: CategoryStat,
+    amountsHidden: Boolean,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = onSelect,
+            )
+            .clip(MaterialTheme.shapes.medium)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
+                else MaterialTheme.colorScheme.background,
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = buildString {
+                    append(stat.category.label)
+                    append("，")
+                    append(visibleYuanText(stat.totalCents, amountsHidden))
+                    append("，占比 ")
+                    append(stat.percent)
+                    append("%")
+                }
+            }
+            .padding(horizontal = QingJiSpacing.xs, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CategoryIconBadge(
                 category = stat.category,
@@ -977,8 +1132,6 @@ private fun HomeScreenPreview() {
                     DailyExpenseTotal(20760L, 0L),
                     DailyExpenseTotal(20761L, 1200L),
                 ),
-                searchText = "",
-                categoryFilter = null,
                 hasMonthEntries = true,
                 monthEntryCount = 2,
                 hasLoaded = true,
@@ -1005,8 +1158,6 @@ private fun HomeScreenEmptyPreview() {
                 isLoading = false,
                 previousMonthTotalCents = 0L,
                 dailyTrend = (0L..6L).map { offset -> DailyExpenseTotal(20755L + offset, 0L) },
-                searchText = "",
-                categoryFilter = null,
                 hasMonthEntries = false,
                 monthEntryCount = 0,
                 hasLoaded = true,
