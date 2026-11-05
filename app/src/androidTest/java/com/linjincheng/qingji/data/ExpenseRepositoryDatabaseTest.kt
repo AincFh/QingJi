@@ -223,6 +223,80 @@ class ExpenseRepositoryDatabaseTest {
     }
 
     @Test
+    fun deletingSavedMonthlyBudgetMakesItUnset() = runBlocking {
+        helper = ExpenseDatabaseHelper(context, databaseName)
+        val repository = ExpenseRepositoryImpl(helper!!)
+        val budget = MonthlyBudget(2025, 4, 68_000L, 10L, 11L)
+
+        assertTrue(repository.saveMonthlyBudget(budget))
+        assertEquals(budget, repository.getMonthlyBudget(2025, 4))
+        assertTrue(repository.deleteMonthlyBudget(2025, 4))
+
+        assertNull(repository.getMonthlyBudget(2025, 4))
+    }
+
+    @Test
+    fun backupMergeReplacesExistingBudgetAndRepeatedImportKeepsMergeSemantics() = runBlocking {
+        helper = ExpenseDatabaseHelper(context, databaseName)
+        val repository = ExpenseRepositoryImpl(helper!!)
+        val localBudget = MonthlyBudget(2025, 3, 42_000L, 20L, 21L)
+        val importedBudget = MonthlyBudget(2025, 3, 96_000L, 30L, 31L)
+        val importedExpense = entry(1_700L, LocalDate.of(2025, 3, 12).toEpochDay())
+
+        assertTrue(repository.saveMonthlyBudget(localBudget))
+        assertEquals(localBudget, repository.getMonthlyBudget(2025, 3))
+
+        val first = repository.applyBackupMerge(listOf(importedExpense), listOf(importedBudget))
+
+        assertEquals(1, first.insertedExpenses)
+        assertEquals(0, first.skippedExpenses)
+        assertEquals(1, first.upsertedBudgets)
+        assertEquals(importedBudget, repository.getMonthlyBudget(2025, 3))
+        assertEquals(importedExpense.backupId, repository.getAllExpenses().single().backupId)
+
+        val repeated = repository.applyBackupMerge(listOf(importedExpense), listOf(importedBudget))
+
+        assertEquals(0, repeated.insertedExpenses)
+        assertEquals(1, repeated.skippedExpenses)
+        assertEquals(1, repeated.upsertedBudgets)
+        assertEquals(importedBudget, repository.getMonthlyBudget(2025, 3))
+        assertEquals(1, repository.getAllExpenses().size)
+    }
+
+    @Test
+    fun insertedAndMergedDataPersistWithBackupIdsAfterReopeningSameDatabase() = runBlocking {
+        helper = ExpenseDatabaseHelper(context, databaseName)
+        val repository = ExpenseRepositoryImpl(helper!!)
+        val insertedExpense = entry(2_400L, LocalDate.of(2024, 8, 2).toEpochDay())
+        val insertedExpenseId = repository.insertExpense(insertedExpense)
+        val savedBudget = MonthlyBudget(2024, 8, 72_000L, 40L, 41L)
+        assertTrue(repository.saveMonthlyBudget(savedBudget))
+
+        val importedExpense = entry(3_100L, LocalDate.of(2024, 9, 3).toEpochDay())
+        val importedBudget = MonthlyBudget(2024, 9, 83_000L, 50L, 51L)
+        val mergeResult = repository.applyBackupMerge(listOf(importedExpense), listOf(importedBudget))
+        assertEquals(1, mergeResult.insertedExpenses)
+        assertEquals(0, mergeResult.skippedExpenses)
+        assertEquals(1, mergeResult.upsertedBudgets)
+
+        helper!!.close()
+        helper = null
+        helper = ExpenseDatabaseHelper(context, databaseName)
+        val reopenedRepository = ExpenseRepositoryImpl(helper!!)
+
+        val reopenedInsertedExpense = reopenedRepository.getExpenseById(insertedExpenseId)!!
+        val reopenedExpenses = reopenedRepository.getAllExpenses()
+        val reopenedImportedExpense = reopenedExpenses.single { it.backupId == importedExpense.backupId }
+        assertEquals(2, reopenedExpenses.size)
+        assertEquals(insertedExpense.backupId, reopenedInsertedExpense.backupId)
+        assertEquals(importedExpense.backupId, reopenedImportedExpense.backupId)
+        assertEquals(UUID.fromString(insertedExpense.backupId).toString(), reopenedInsertedExpense.backupId)
+        assertEquals(UUID.fromString(importedExpense.backupId).toString(), reopenedImportedExpense.backupId)
+        assertEquals(savedBudget, reopenedRepository.getMonthlyBudget(2024, 8))
+        assertEquals(importedBudget, reopenedRepository.getMonthlyBudget(2024, 9))
+    }
+
+    @Test
     fun failedBackupBudgetWriteRollsBackExpenseInsert() = runBlocking {
         helper = ExpenseDatabaseHelper(context, databaseName)
         val repository = ExpenseRepositoryImpl(helper!!)
