@@ -172,9 +172,9 @@ fun SettingsScreen(
                                     )
                                     Text(
                                         text = if (preferences.hideAmounts) {
-                                            "当前已隐藏：首页、账单、统计和详情会遮挡金额，记账输入仍可见。"
+                                            "当前已开启：首页、账单、统计和详情中的精确金额及 TalkBack 读屏金额文本会被遮挡；趋势形状、活动密度、分类占比与笔数仍保留，记账输入仍可见。"
                                         } else {
-                                            "当前未隐藏。开启后，首页、账单、统计和详情会遮挡金额；记账输入仍可见。"
+                                            "当前未开启。开启后会遮挡首页、账单、统计和详情中的精确金额及 TalkBack 读屏金额文本；趋势形状、活动密度、分类占比与笔数仍保留，记账输入仍可见。"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
