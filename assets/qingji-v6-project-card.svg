@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="t d">
+<title id="t">轻记 QingJi v6｜Android 原生消费记账应用</title><desc id="d">面试作品信息图。功能包含快速记账、交互统计、消费日历、月度预算、本地数据备份与隐私设置，Kotlin + Jetpack Compose + SQLite。</desc>
+<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f0faf4"/><stop offset="1" stop-color="#faf8f2"/></linearGradient><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#22845f"/><stop offset="1" stop-color="#174a3b"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-opacity=".10"/></filter></defs>
+<rect width="1600" height="900" fill="url(#b)"/>
+<rect x="56" y="54" width="86" height="86" rx="22" fill="url(#g)"/><path d="M81 108 Q89 68 122 74 Q118 114 86 122 Z" fill="#e3f4e9"/><path d="M84 119 L114 82" stroke="#2a8962" stroke-width="4"/>
+<text x="170" y="111" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" fill="#18342c" font-size="68" font-weight="700">轻记 QingJi v6</text>
+<text x="174" y="161" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" fill="#557268" font-size="28">Android 原生个人消费记账 · Native 开发岗位评估作品</text>
+<rect x="1230" y="64" width="310" height="56" rx="28" fill="#dff3e7"/><text x="1385" y="102" text-anchor="middle" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" fill="#216a4e" font-size="25">面试评估版 · v6</text>
+<!-- phone illustration -->
+<rect x="78" y="227" width="372" height="557" rx="52" fill="#223e33" filter="url(#s)"/><rect x="91" y="241" width="346" height="529" rx="38" fill="#fcfbf6"/>
+<text x="116" y="289" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="25" font-weight="bold" fill="#1f5742">轻记</text>
+<text x="116" y="344" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="21" fill="#506e61">2026年11月</text>
+<text x="116" y="422" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="65" font-weight="700" fill="#d46830">¥1,536.89</text>
+<text x="118" y="455" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="21" fill="#577063">本月消费  ·  虚构演示数据</text>
+<rect x="113" y="484" width="300" height="156" rx="16" fill="#eaf5ed"/>
+<path d="M136 598 L171 568 L209 579 L243 532 L281 549 L317 512 L359 538 L391 502" fill="none" stroke="#2a8962" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="391" cy="502" r="9" fill="#d46830"/>
+<text x="125" y="680" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="22" fill="#1f5742">首页　　账单　　记一笔　　统计　　设置</text>
+<text x="73" y="830" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="24" fill="#2a6a51">交互趋势 · 真实账单联动</text>
+<!-- features -->
+<text x="527" y="267" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="46" font-weight="700" fill="#18342c">把日常消费看得更清楚</text>
+<g font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif">
+<rect x="520" y="304" width="492" height="175" rx="24" fill="#ffffff" stroke="#d9e8de" stroke-width="2"/><text x="555" y="363" font-size="36" font-weight="700" fill="#1c694d">快速记账</text><text x="555" y="418" font-size="27" fill="#506b5b">金额 · 分类 · 日期 · 备注</text>
+<rect x="1032" y="304" width="488" height="175" rx="24" fill="#ffffff" stroke="#d9e8de" stroke-width="2"/><text x="1067" y="363" font-size="36" font-weight="700" fill="#1c694d">可交互统计</text><text x="1067" y="418" font-size="27" fill="#506b5b">趋势与分类可钻取明细</text>
+<rect x="520" y="497" width="492" height="175" rx="24" fill="#ffffff" stroke="#d9e8de" stroke-width="2"/><text x="555" y="556" font-size="36" font-weight="700" fill="#1c694d">预算与消费日历</text><text x="555" y="611" font-size="27" fill="#506b5b">预算剩余 · 每日消费查看</text>
+<rect x="1032" y="497" width="488" height="175" rx="24" fill="#ffffff" stroke="#d9e8de" stroke-width="2"/><text x="1067" y="556" font-size="36" font-weight="700" fill="#1c694d">本地隐私与备份</text><text x="1067" y="611" font-size="27" fill="#506b5b">金额隐藏 · SAF JSON</text>
+<rect x="520" y="704" width="1000" height="114" rx="25" fill="#e1f2e8"/><text x="557" y="753" font-size="31" font-weight="700" fill="#1b6047">Kotlin + Jetpack Compose + SQLite</text><text x="557" y="794" font-size="25" fill="#3f6b55">108 / 108 单元测试通过 · Android 16 真机 · APK + 55 秒演示</text>
+</g><text x="526" y="859" font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" font-size="25" fill="#557268">github.com/AincFh/QingJi · PR #1 · 预发布原型，非商店上架版</text></svg>
