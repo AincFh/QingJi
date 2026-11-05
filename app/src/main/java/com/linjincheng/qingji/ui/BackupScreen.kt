@@ -1,12 +1,12 @@
 package com.linjincheng.qingji.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +31,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -66,7 +68,10 @@ fun BackupScreen(
     onCancelImport: () -> Unit,
     onDismissFeedback: () -> Unit,
 ) {
-    val busy = state.isExporting || state.isImporting
+    val busy = state.isBusy
+    BackHandler(enabled = busy || state.importPreview == null) {
+        if (!busy) onBack()
+    }
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         Column(
             modifier = Modifier
@@ -142,48 +147,65 @@ fun BackupScreen(
             onDismissRequest = { if (!state.isImporting) onCancelImport() },
             title = { Text("确认合并备份") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm)) {
-                    Text("新增流水：${preview.newExpenses} 笔")
-                    Text("跳过重复流水：${preview.skippedExpenses} 笔")
-                    Text(
-                        text = "将覆盖的预算月份（${preview.budgetMonths.size}）",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
+                ) {
+                    item { Text("新增流水：${preview.newExpenses} 笔") }
+                    item { Text("跳过重复流水：${preview.skippedExpenses} 笔") }
+                    item {
+                        Text(
+                            text = "将覆盖的预算月份（${preview.budgetMonths.size}）",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     if (preview.budgetMonths.isEmpty()) {
-                        Text("备份中没有预算数据。")
+                        item { Text("备份中没有预算数据。") }
                     } else {
-                        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
-                            items(preview.budgetMonths) { month ->
-                                Text(
-                                    text = formatBudgetMonth(month),
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
+                        items(preview.budgetMonths, key = { it.toString() }) { month ->
+                            Text(
+                                text = formatBudgetMonth(month),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
                     }
-                    Text(
-                        text = "确认后才会写入。相同 backupId 的流水保持本地版本，预算按月份覆盖。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    item {
+                        Text(
+                            text = "确认后才会写入。相同 backupId 的流水保持本地版本，预算按月份覆盖。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (state.isImporting) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.size(QingJiSpacing.xs))
-                            Text("正在合并数据…")
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.size(QingJiSpacing.xs))
+                                Text("正在合并数据…")
+                            }
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = onConfirmImport, enabled = !state.isImporting) {
+                Button(
+                    onClick = onConfirmImport,
+                    enabled = !state.isImporting,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
                     Text(if (state.isImporting) "正在合并…" else "确认合并")
                 }
             },
             dismissButton = {
-                TextButton(onClick = onCancelImport, enabled = !state.isImporting) { Text("取消") }
+                TextButton(
+                    onClick = onCancelImport,
+                    enabled = !state.isImporting,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("取消")
+                }
             },
         )
     }
@@ -205,7 +227,12 @@ private fun BackupInfoCard(
             modifier = Modifier.fillMaxWidth().padding(QingJiSpacing.md),
             verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = title,
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
             Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             action()
         }
@@ -228,7 +255,9 @@ private fun BackupFeedbackCard(feedback: BackupScreenFeedback, onDismiss: () -> 
             if (feedback.isError) {
                 Text(
                     text = "!",
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clearAndSetSemantics { contentDescription = "操作失败" },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = content,
@@ -242,10 +271,18 @@ private fun BackupFeedbackCard(feedback: BackupScreenFeedback, onDismiss: () -> 
                 style = MaterialTheme.typography.bodyMedium,
                 color = content,
             )
-            TextButton(onClick = onDismiss) { Text("关闭", color = content) }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text("关闭", color = content)
+            }
         }
     }
 }
 
-private fun formatBudgetMonth(month: YearMonth): String =
+internal fun formatBudgetMonth(month: YearMonth): String =
     String.format(Locale.CHINA, "%04d年%02d月", month.year, month.monthValue)
+
+internal val BackupScreenState.isBusy: Boolean
+    get() = isExporting || isImporting
