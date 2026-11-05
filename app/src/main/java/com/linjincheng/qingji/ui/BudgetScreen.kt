@@ -71,13 +71,19 @@ import java.time.YearMonth
 @Composable
 fun BudgetScreen(
     summary: MonthlyBudgetSummary,
-    amountsHidden: Boolean = false,
     onSaveBudget: (year: Int, month: Int, amountCents: Long) -> Unit,
     onClearBudget: (year: Int, month: Int) -> Unit,
     onMonthChange: (year: Int, month: Int) -> Unit,
     onViewExpenses: (year: Int, month: Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    amountsHidden: Boolean = false,
+    isLoading: Boolean = false,
+    loadFailed: Boolean = false,
+    onRetry: () -> Unit = {},
+    feedbackMessage: String? = null,
+    feedbackIsError: Boolean = false,
+    onDismissFeedback: () -> Unit = {},
 ) {
     val display = summary.toBudgetDisplayModel()
     var showEditor by remember { mutableStateOf(false) }
@@ -124,36 +130,85 @@ fun BudgetScreen(
                 )
             }
 
-            BudgetMonthSelector(
-                year = summary.year,
-                month = summary.month,
-                onMonthChange = onMonthChange,
-            )
+            when {
+                isLoading -> {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        text = "正在读取 ${summary.year} 年 ${summary.month} 月预算…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
-            BudgetSummaryCard(
-                summary = summary,
-                display = display,
-                amountsHidden = amountsHidden,
-                onEdit = {
-                    amountInput = if (amountsHidden) {
-                        ""
-                    } else {
-                        summary.budgetCents?.let(MoneyUtils::formatCents).orEmpty()
+                loadFailed -> {
+                    Text(
+                        text = "暂时无法读取本月预算和消费汇总。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(
+                        onClick = onRetry,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) {
+                        Text("重试")
                     }
-                    inputError = null
-                    showEditor = true
-                },
-                onClear = { showClearConfirmation = true },
-            )
+                }
 
-            OutlinedButton(
-                onClick = { onViewExpenses(summary.year, summary.month) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Text("查看本月流水")
+                else -> {
+                    BudgetMonthSelector(
+                        year = summary.year,
+                        month = summary.month,
+                        onMonthChange = onMonthChange,
+                    )
+
+                    BudgetSummaryCard(
+                        summary = summary,
+                        display = display,
+                        amountsHidden = amountsHidden,
+                        onEdit = {
+                            amountInput = if (amountsHidden) {
+                                ""
+                            } else {
+                                summary.budgetCents?.let(MoneyUtils::formatCents).orEmpty()
+                            }
+                            inputError = null
+                            showEditor = true
+                        },
+                        onClear = { showClearConfirmation = true },
+                    )
+
+                    OutlinedButton(
+                        onClick = { onViewExpenses(summary.year, summary.month) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Text("查看本月流水")
+                    }
+                }
+            }
+
+            feedbackMessage?.let { message ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = if (feedbackIsError) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(QingJiSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = message,
+                            modifier = Modifier.weight(1f),
+                            color = if (feedbackIsError) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        TextButton(onClick = onDismissFeedback) { Text("关闭") }
+                    }
+                }
             }
         }
     }
@@ -514,10 +569,10 @@ private fun BudgetMetricRow(
 private fun BudgetMetric(
     label: String,
     value: String?,
-    amountCents: Long? = null,
-    hiddenValue: Boolean = true,
     amountsHidden: Boolean,
     modifier: Modifier = Modifier,
+    amountCents: Long? = null,
+    hiddenValue: Boolean = true,
 ) {
     Surface(
         modifier = modifier,

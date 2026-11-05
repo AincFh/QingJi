@@ -25,7 +25,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,6 +67,9 @@ fun CalendarScreen(
     onOpenDayDetails: (Long) -> Unit,
     amountsHidden: Boolean,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
+    loadFailed: Boolean = false,
+    onRetry: () -> Unit = {},
 ) {
     val monthDays = remember(month, days) { CalendarUiModel.buildMonthDays(month, days) }
     val monthGrid = remember(month) { CalendarUiModel.buildMonthGrid(month) }
@@ -102,88 +107,120 @@ fun CalendarScreen(
             MonthNavigator(
                 month = month,
                 onMonthChange = onMonthChange,
+                canMoveNext = month.isBefore(YearMonth.now()),
                 modifier = Modifier.padding(horizontal = QingJiSpacing.md),
             )
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = QingJiSpacing.xs),
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = QingJiSpacing.xxs, vertical = QingJiSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xxs),
-                ) {
-                    WeekdayHeader()
-                    monthGrid.chunked(7).forEach { week ->
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            week.forEach { epochDay ->
-                                if (epochDay == null) {
-                                    Spacer(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 52.dp),
-                                    )
-                                } else {
-                                    val day = dayByEpochDay.getValue(epochDay)
-                                    CalendarDayCell(
-                                        day = day,
-                                        month = month,
-                                        selected = selectedEpochDay == epochDay,
-                                        maximumDailyTotal = maximumDailyTotal,
-                                        amountsHidden = amountsHidden,
-                                        onClick = { onDaySelected(epochDay) },
-                                        modifier = Modifier.weight(1f),
-                                    )
+            when {
+                isLoading -> {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = QingJiSpacing.md),
+                    )
+                    Text(
+                        text = "正在读取本月消费记录…",
+                        modifier = Modifier.padding(horizontal = QingJiSpacing.md),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                loadFailed -> {
+                    Text(
+                        text = "暂时无法读取本月消费记录。",
+                        modifier = Modifier.padding(horizontal = QingJiSpacing.md),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(
+                        onClick = onRetry,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = QingJiSpacing.md).heightIn(min = 48.dp),
+                    ) {
+                        Text("重试")
+                    }
+                }
+
+                else -> {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = QingJiSpacing.xs),
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = QingJiSpacing.xxs, vertical = QingJiSpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xxs),
+                        ) {
+                            WeekdayHeader()
+                            monthGrid.chunked(7).forEach { week ->
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    week.forEach { epochDay ->
+                                        if (epochDay == null) {
+                                            Spacer(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 52.dp),
+                                            )
+                                        } else {
+                                            val day = dayByEpochDay.getValue(epochDay)
+                                            CalendarDayCell(
+                                                day = day,
+                                                month = month,
+                                                selected = selectedEpochDay == epochDay,
+                                                maximumDailyTotal = maximumDailyTotal,
+                                                amountsHidden = amountsHidden,
+                                                onClick = { onDaySelected(epochDay) },
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                    }
                                 }
                             }
+
+                            Text(
+                                text = when {
+                                    !hasActivity -> "本月暂无消费记录"
+                                    amountsHidden -> "本月有 $totalTransactionCount 笔消费 · 橙点表示有消费"
+                                    else -> "橙点越明显，表示当日支出越高"
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = QingJiSpacing.md)
+                                    .padding(top = QingJiSpacing.xs)
+                                    .semantics {
+                                        if (amountsHidden) contentDescription =
+                                            if (!hasActivity) "本月暂无消费记录" else
+                                                "本月有 $totalTransactionCount 笔消费，橙点表示有消费"
+                                    },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
 
+                    SelectedDaySummary(
+                        date = selectedDate,
+                        day = selectedDay,
+                        amountsHidden = amountsHidden,
+                        onOpenDayDetails = onOpenDayDetails,
+                        modifier = Modifier.padding(horizontal = QingJiSpacing.md),
+                    )
+
                     Text(
-                        text = when {
-                            !hasActivity -> "本月暂无消费记录"
-                            amountsHidden -> "本月有 $totalTransactionCount 笔消费 · 橙点表示有消费"
-                            else -> "橙点越明显，表示当日支出越高"
-                        },
+                        text = "数据来自本机已保存的消费记录",
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = QingJiSpacing.md)
-                            .padding(top = QingJiSpacing.xs)
-                            .semantics {
-                                if (amountsHidden) contentDescription =
-                                    if (!hasActivity) "本月暂无消费记录" else
-                                        "本月有 $totalTransactionCount 笔消费，橙点表示有消费"
-                            },
-                        style = MaterialTheme.typography.bodySmall,
+                            .padding(top = QingJiSpacing.xs),
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                 }
             }
-
-            SelectedDaySummary(
-                date = selectedDate,
-                day = selectedDay,
-                amountsHidden = amountsHidden,
-                onOpenDayDetails = onOpenDayDetails,
-                modifier = Modifier.padding(horizontal = QingJiSpacing.md),
-            )
-
-            Text(
-                text = "数据来自本机已保存的消费记录",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = QingJiSpacing.md)
-                    .padding(top = QingJiSpacing.xs),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }
@@ -192,6 +229,7 @@ fun CalendarScreen(
 private fun MonthNavigator(
     month: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
+    canMoveNext: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -237,6 +275,7 @@ private fun MonthNavigator(
             }
             IconButton(
                 onClick = { onMonthChange(month.plusMonths(1)) },
+                enabled = canMoveNext,
                 modifier = Modifier.semantics(mergeDescendants = true) {
                     contentDescription = "下一月"
                 },

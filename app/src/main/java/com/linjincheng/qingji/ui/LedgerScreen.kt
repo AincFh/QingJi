@@ -75,6 +75,7 @@ fun RecordsScreen(
     onCategoryFilterChange: (ExpenseCategory?) -> Unit,
     onMonthFilterChange: (YearMonth?) -> Unit,
     onRetry: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit,
     amountsHidden: Boolean,
 ) {
@@ -110,6 +111,7 @@ fun RecordsScreen(
                     hasActiveFilter = hasActiveFilter,
                     showSummary = state.hasLoaded && !state.loadFailed,
                     amountsHidden = amountsHidden,
+                    onOpenCalendar = onOpenCalendar,
                     onOpenSettings = onOpenSettings,
                 )
             }
@@ -349,6 +351,7 @@ private fun LedgerHeader(
     hasActiveFilter: Boolean,
     showSummary: Boolean,
     amountsHidden: Boolean,
+    onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm)) {
@@ -369,6 +372,12 @@ private fun LedgerHeader(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            TextButton(
+                onClick = onOpenCalendar,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text("日历")
             }
             // 入口保留在顶部方便从账单页快速调整全局隐私和显示偏好。
             androidx.compose.material3.IconButton(

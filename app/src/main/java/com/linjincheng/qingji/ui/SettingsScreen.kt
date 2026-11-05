@@ -62,6 +62,7 @@ fun SettingsScreen(
     onDefaultCategoryChange: (ExpenseCategory) -> Unit,
     onBack: () -> Unit,
     showBackButton: Boolean = true,
+    onOpenCalendar: (() -> Unit)? = null,
     onOpenBudget: (() -> Unit)? = null,
     onExportBackup: (() -> Unit)? = null,
     onRestoreBackup: (() -> Unit)? = null,
@@ -265,14 +266,26 @@ fun SettingsScreen(
                     }
                 }
 
-                if (onOpenBudget != null) {
+                if (onOpenCalendar != null || onOpenBudget != null) {
                     SettingsGroup(title = "消费规划") {
                         SettingsCard {
-                            SettingsActionRow(
-                                title = "月度预算",
-                                description = "设置本月额度，查看已用和剩余。",
-                                onClick = onOpenBudget,
-                            )
+                            if (onOpenCalendar != null) {
+                                SettingsActionRow(
+                                    title = "消费日历",
+                                    description = "按日期查看本机消费记录。",
+                                    onClick = onOpenCalendar,
+                                )
+                            }
+                            if (onOpenCalendar != null && onOpenBudget != null) {
+                                SettingsDivider(startIndent = QingJiSpacing.md)
+                            }
+                            if (onOpenBudget != null) {
+                                SettingsActionRow(
+                                    title = "月度预算",
+                                    description = "设置本月额度，查看已用和剩余。",
+                                    onClick = onOpenBudget,
+                                )
+                            }
                         }
                     }
                 }

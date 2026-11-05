@@ -4,7 +4,6 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.linjincheng.qingji.util.DateUtils
-import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,6 +19,7 @@ interface ExpenseRepository {
     suspend fun getMonthlyTotal(year: Int, month: Int): Long
     suspend fun getMonthlyCategoryTotals(year: Int, month: Int): Map<ExpenseCategory, Long>
     suspend fun getMonthlyBudget(year: Int, month: Int): MonthlyBudget?
+    suspend fun getAllMonthlyBudgets(): List<MonthlyBudget>
     suspend fun saveMonthlyBudget(budget: MonthlyBudget): Boolean
     suspend fun deleteMonthlyBudget(year: Int, month: Int): Boolean
     suspend fun getDailyExpenseAggregates(startInclusive: Long, endExclusive: Long): List<DailyExpenseAggregate>
@@ -160,7 +160,20 @@ class ExpenseRepositoryImpl(private val databaseHelper: ExpenseDatabaseHelper) :
         }
     }
 
+    override suspend fun getAllMonthlyBudgets(): List<MonthlyBudget> = withContext(Dispatchers.IO) {
+        databaseHelper.readableDatabase.query(
+            TABLE_MONTHLY_BUDGETS,
+            BUDGET_COLUMNS,
+            null,
+            null,
+            null,
+            null,
+            "$COL_YEAR DESC, $COL_MONTH DESC",
+        ).use { cursor -> cursor.toBudgetList() }
+    }
+
     override suspend fun saveMonthlyBudget(budget: MonthlyBudget): Boolean = withContext(Dispatchers.IO) {
+        ExpenseRepositoryValidation.validateBudget(budget)
         val db = databaseHelper.writableDatabase
         db.beginTransaction()
         try {
@@ -292,6 +305,7 @@ class ExpenseRepositoryImpl(private val databaseHelper: ExpenseDatabaseHelper) :
 
     private fun validateBackupPayload(expenses: List<ExpenseEntry>, budgets: List<MonthlyBudget>) {
         expenses.forEach(::validateExpense)
+        budgets.forEach(ExpenseRepositoryValidation::validateBudget)
         require(expenses.map { canonicalBackupId(it.backupId) }.distinct().size == expenses.size) {
             "备份内存在重复流水身份"
         }
@@ -301,10 +315,7 @@ class ExpenseRepositoryImpl(private val databaseHelper: ExpenseDatabaseHelper) :
     }
 
     private fun validateExpense(entry: ExpenseEntry) {
-        require(entry.amountCents > 0L) { "流水金额必须大于零" }
-        require(entry.note.length <= 120) { "备注不能超过 120 字" }
-        LocalDate.ofEpochDay(entry.expenseDate)
-        require(entry.createdAt >= 0L && entry.updatedAt >= 0L) { "流水时间戳不能为负数" }
+        ExpenseRepositoryValidation.validateExpense(entry)
         canonicalBackupId(entry.backupId)
     }
 
@@ -365,6 +376,10 @@ class ExpenseRepositoryImpl(private val databaseHelper: ExpenseDatabaseHelper) :
         createdAt = getLong(getColumnIndexOrThrow(COL_CREATED_AT)),
         updatedAt = getLong(getColumnIndexOrThrow(COL_UPDATED_AT)),
     )
+
+    private fun Cursor.toBudgetList(): List<MonthlyBudget> = buildList(count) {
+        while (moveToNext()) add(toBudget())
+    }
 
     companion object {
         private const val TABLE_EXPENSES = ExpenseDatabaseHelper.TABLE_EXPENSES

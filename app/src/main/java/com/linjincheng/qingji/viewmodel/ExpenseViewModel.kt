@@ -5,10 +5,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.linjincheng.qingji.data.ExpenseCategory
+import com.linjincheng.qingji.data.ExpenseBackupCodec
+import com.linjincheng.qingji.data.ExpenseBackupPayload
 import com.linjincheng.qingji.data.ExpenseDatabaseHelper
 import com.linjincheng.qingji.data.ExpenseEntry
 import com.linjincheng.qingji.data.ExpenseRepository
 import com.linjincheng.qingji.data.ExpenseRepositoryImpl
+import com.linjincheng.qingji.data.MonthlyBudget
+import com.linjincheng.qingji.data.MonthlyBudgetSummary
+import com.linjincheng.qingji.ui.BackupScreenFeedback
+import com.linjincheng.qingji.ui.BackupScreenState
 import com.linjincheng.qingji.util.AmountParseResult
 import com.linjincheng.qingji.util.DateUtils
 import com.linjincheng.qingji.util.DailyExpenseTotal
@@ -25,6 +31,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import java.time.Instant
+import java.util.Locale
 
 /**
  * Secondary screen routes are represented as state; the app does not use Navigation Compose.
@@ -33,6 +42,12 @@ sealed interface Screen {
     data object Home : Screen
 
     data object Settings : Screen
+
+    data object Calendar : Screen
+
+    data object Budget : Screen
+
+    data object Backup : Screen
 
     /** 表单：expenseId = null 表示新增，否则为编辑该条记录。 */
     data class Form(val expenseId: Long? = null) : Screen
@@ -111,6 +126,31 @@ data class DetailUiState(
     val feedbackMessage: String? = null,
 )
 
+data class CalendarUiState(
+    val month: YearMonth,
+    val dailyTotals: List<com.linjincheng.qingji.data.DailyExpenseAggregate> = emptyList(),
+    val selectedEpochDay: Long? = null,
+    val isLoading: Boolean = false,
+    val loadFailed: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val hasOpened: Boolean = false,
+)
+
+data class BudgetUiState(
+    val month: YearMonth,
+    val summary: MonthlyBudgetSummary,
+    val isLoading: Boolean = false,
+    val loadFailed: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val isSaving: Boolean = false,
+    val feedbackMessage: String? = null,
+    val feedbackIsError: Boolean = false,
+)
+
+enum class BackupPickerAction { EXPORT, IMPORT }
+
+data class BackupPickerRequest(val id: Long, val action: BackupPickerAction)
+
 /**
  * App-level ViewModel for navigation and expense screen state.
  * 金额一律整数分；统计只在内存重算；数据库写入仅经 ExpenseRepository（内部 Dispatchers.IO）。
@@ -128,6 +168,18 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
 
     private val _detail = MutableStateFlow(initialDetail())
     val detail: StateFlow<DetailUiState> = _detail.asStateFlow()
+
+    private val _calendar = MutableStateFlow(initialCalendar())
+    val calendar: StateFlow<CalendarUiState> = _calendar.asStateFlow()
+
+    private val _budget = MutableStateFlow(initialBudget())
+    val budget: StateFlow<BudgetUiState> = _budget.asStateFlow()
+
+    private val _backup = MutableStateFlow(BackupScreenState())
+    val backup: StateFlow<BackupScreenState> = _backup.asStateFlow()
+
+    private val _backupPickerRequest = MutableStateFlow<BackupPickerRequest?>(null)
+    val backupPickerRequest: StateFlow<BackupPickerRequest?> = _backupPickerRequest.asStateFlow()
 
     /** 返回栈：Form → Detail 或 Home 按进入路径回退；Detail → Home。 */
     private val backStack = ArrayDeque<Screen>()
@@ -147,6 +199,15 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     /** 防止「确认删除」重复触发。 */
     private var deleteInFlight = false
 
+    private var calendarRefreshGeneration = 0L
+    private var budgetRefreshGeneration = 0L
+    private var budgetWriteInFlight = false
+    private var backupPickerRequestId = 0L
+    private var backupExportInFlight = false
+    private var backupImportReadInFlight = false
+    private var backupApplyInFlight = false
+    private var pendingBackupPayload: ExpenseBackupPayload? = null
+
     init {
         refreshHome()
     }
@@ -165,6 +226,347 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     fun openSettings() {
         backStack.addLast(_screen.value)
         _screen.value = Screen.Settings
+    }
+
+    fun openCalendar() {
+        if (_screen.value != Screen.Calendar) backStack.addLast(_screen.value)
+        val current = _calendar.value
+        val month = if (current.hasOpened) current.month else YearMonth.of(_home.value.year, _home.value.month)
+        val selectedDay = current.selectedEpochDay
+            ?.takeIf { YearMonth.from(LocalDate.ofEpochDay(it)) == month }
+            ?: month.atDay(1).toEpochDay()
+        _calendar.value = current.copy(month = month, selectedEpochDay = selectedDay, hasOpened = true)
+        _screen.value = Screen.Calendar
+        refreshCalendar()
+    }
+
+    fun onCalendarMonthChange(month: YearMonth) {
+        if (month.isAfter(YearMonth.now())) return
+        val current = _calendar.value
+        if (month == current.month && !current.loadFailed) return
+        val selectedDay = current.selectedEpochDay
+            ?.takeIf { YearMonth.from(LocalDate.ofEpochDay(it)) == month }
+            ?: month.atDay(1).toEpochDay()
+        _calendar.value = current.copy(
+            month = month,
+            dailyTotals = emptyList(),
+            selectedEpochDay = selectedDay,
+            isLoading = true,
+            loadFailed = false,
+            hasLoaded = false,
+        )
+        refreshCalendar()
+    }
+
+    fun onCalendarDaySelected(epochDay: Long) {
+        val date = runCatching { LocalDate.ofEpochDay(epochDay) }.getOrNull() ?: return
+        if (YearMonth.from(date) != _calendar.value.month) return
+        _calendar.update { it.copy(selectedEpochDay = epochDay) }
+    }
+
+    fun retryCalendarLoad() {
+        refreshCalendar()
+    }
+
+    /** Calendar drill-down writes the day range into the same filter used by charts and the ledger. */
+    fun openCalendarDayDetails(epochDay: Long) {
+        val date = runCatching { LocalDate.ofEpochDay(epochDay) }.getOrNull() ?: return
+        if (YearMonth.from(date) != _calendar.value.month) return
+        onCalendarDaySelected(epochDay)
+        setExpenseFilter(
+            _home.value.expenseFilter.copy(dateRange = EpochDayRange.day(epochDay)),
+            forceAllHistory = true,
+        )
+        backStack.clear()
+        _screen.value = Screen.Home
+    }
+
+    fun openBudget() {
+        if (_screen.value != Screen.Budget) backStack.addLast(_screen.value)
+        val month = YearMonth.of(_home.value.year, _home.value.month)
+        _screen.value = Screen.Budget
+        loadBudgetSummary(month)
+    }
+
+    fun onBudgetMonthChange(year: Int, month: Int) {
+        val target = runCatching { YearMonth.of(year, month) }.getOrNull() ?: return
+        if (budgetWriteInFlight || target == _budget.value.month && !_budget.value.loadFailed) return
+        loadBudgetSummary(target)
+    }
+
+    fun retryBudgetLoad() {
+        loadBudgetSummary(_budget.value.month)
+    }
+
+    fun saveBudget(year: Int, month: Int, amountCents: Long) {
+        val target = runCatching { YearMonth.of(year, month) }.getOrNull() ?: return
+        if (budgetWriteInFlight || target != _budget.value.month) return
+        if (amountCents !in 0L..MoneyUtils.MAX_CENTS) {
+            _budget.update {
+                it.copy(feedbackMessage = "预算金额超出允许范围。", feedbackIsError = true)
+            }
+            return
+        }
+        budgetWriteInFlight = true
+        _budget.update { it.copy(isSaving = true, feedbackMessage = null, feedbackIsError = false) }
+        viewModelScope.launch {
+            val result = captureResult {
+                val existing = repository.getMonthlyBudget(year, month)
+                val now = System.currentTimeMillis().coerceAtLeast(0L)
+                val saved = repository.saveMonthlyBudget(
+                    MonthlyBudget(
+                        year = year,
+                        month = month,
+                        amountCents = amountCents,
+                        createdAt = existing?.createdAt ?: now,
+                        updatedAt = now,
+                    ),
+                )
+                check(saved) { "保存预算失败，请重试。" }
+            }
+            budgetWriteInFlight = false
+            if (result.isFailure) {
+                _budget.update {
+                    it.copy(
+                        isSaving = false,
+                        feedbackMessage = "预算保存失败：${result.exceptionOrNull()?.message ?: "请重试"}",
+                        feedbackIsError = true,
+                    )
+                }
+            } else if (_budget.value.month == target) {
+                loadBudgetSummary(target, feedbackMessage = "预算已保存。")
+            }
+        }
+    }
+
+    fun clearBudget(year: Int, month: Int) {
+        val target = runCatching { YearMonth.of(year, month) }.getOrNull() ?: return
+        if (budgetWriteInFlight || target != _budget.value.month) return
+        budgetWriteInFlight = true
+        _budget.update { it.copy(isSaving = true, feedbackMessage = null, feedbackIsError = false) }
+        viewModelScope.launch {
+            val result = captureResult {
+                val deleted = repository.deleteMonthlyBudget(year, month)
+                check(deleted) { "本月预算已不存在，请刷新后重试。" }
+            }
+            budgetWriteInFlight = false
+            if (result.isFailure) {
+                _budget.update {
+                    it.copy(
+                        isSaving = false,
+                        feedbackMessage = "预算清除失败：${result.exceptionOrNull()?.message ?: "请重试"}",
+                        feedbackIsError = true,
+                    )
+                }
+            } else if (_budget.value.month == target) {
+                loadBudgetSummary(target, feedbackMessage = "本月预算已清除。")
+            }
+        }
+    }
+
+    fun dismissBudgetFeedback() {
+        _budget.update { it.copy(feedbackMessage = null, feedbackIsError = false) }
+    }
+
+    fun openBudgetExpenses(year: Int, month: Int) {
+        val target = runCatching { YearMonth.of(year, month) }.getOrNull() ?: return
+        setExpenseFilter(
+            _home.value.expenseFilter.copy(dateRange = EpochDayRange.month(target)),
+            forceAllHistory = true,
+        )
+        backStack.clear()
+        _screen.value = Screen.Home
+    }
+
+    fun openBackup() {
+        pendingBackupPayload = null
+        _backup.update { BackupScreenState() }
+        if (_screen.value != Screen.Backup) backStack.addLast(_screen.value)
+        _screen.value = Screen.Backup
+    }
+
+    fun requestBackupExport() = requestBackupPicker(BackupPickerAction.EXPORT)
+
+    fun requestBackupImport() = requestBackupPicker(BackupPickerAction.IMPORT)
+
+    private fun requestBackupPicker(action: BackupPickerAction) {
+        val current = if (_screen.value == Screen.Backup) _backup.value else BackupScreenState()
+        if (current.isExporting || current.isImporting) return
+        if (_screen.value != Screen.Backup) {
+            pendingBackupPayload = null
+            _backup.value = BackupScreenState()
+            backStack.addLast(_screen.value)
+            _screen.value = Screen.Backup
+        }
+        pendingBackupPayload = null
+        backupPickerRequestId += 1L
+        _backupPickerRequest.value = BackupPickerRequest(backupPickerRequestId, action)
+        _backup.value = when (action) {
+            BackupPickerAction.EXPORT -> current.copy(isExporting = true, importPreview = null, feedback = null)
+            BackupPickerAction.IMPORT -> current.copy(isImporting = true, importPreview = null, feedback = null)
+        }
+    }
+
+    fun claimBackupPickerRequest(id: Long): BackupPickerRequest? {
+        val request = _backupPickerRequest.value ?: return null
+        if (request.id != id) return null
+        _backupPickerRequest.value = null
+        return request
+    }
+
+    fun onBackupExportPickerCancelled() {
+        if (backupExportInFlight || !prepareBackupPickerResult(BackupPickerAction.EXPORT)) return
+        _backup.update {
+            it.copy(isExporting = false, feedback = BackupScreenFeedback("已取消导出。", isError = false))
+        }
+    }
+
+    fun onBackupImportPickerCancelled() {
+        if (backupImportReadInFlight || !prepareBackupPickerResult(BackupPickerAction.IMPORT)) return
+        _backup.update {
+            it.copy(isImporting = false, feedback = BackupScreenFeedback("已取消恢复。", isError = false))
+        }
+    }
+
+    fun exportBackup(appVersion: String, writeDocument: suspend (ByteArray) -> Unit) {
+        if (backupExportInFlight || !prepareBackupPickerResult(BackupPickerAction.EXPORT)) return
+        backupExportInFlight = true
+        viewModelScope.launch {
+            val result = captureResult {
+                val expenses = repository.getAllExpenses()
+                val budgets = repository.getAllMonthlyBudgets()
+                val bytes = ExpenseBackupCodec.encode(
+                    expenses = expenses,
+                    budgets = budgets,
+                    appVersion = appVersion,
+                    exportedAt = Instant.now(),
+                )
+                writeDocument(bytes)
+            }
+            backupExportInFlight = false
+            _backup.update {
+                it.copy(
+                    isExporting = false,
+                    feedback = result.fold(
+                        onSuccess = { BackupScreenFeedback("备份已导出。", isError = false) },
+                        onFailure = { error -> BackupScreenFeedback("导出失败：${error.message ?: "无法写入文件"}", isError = true) },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun onBackupFileSelected(readDocument: suspend () -> ExpenseBackupPayload) {
+        if (backupImportReadInFlight || !prepareBackupPickerResult(BackupPickerAction.IMPORT)) return
+        backupImportReadInFlight = true
+        viewModelScope.launch {
+            val result = captureResult {
+                val payload = readDocument()
+                val existingIds = repository.getAllExpenses().mapTo(HashSet()) { it.backupId.lowercase(Locale.ROOT) }
+                payload to payload.preview(existingIds)
+            }
+            backupImportReadInFlight = false
+            result.fold(
+                onSuccess = { (payload, preview) ->
+                    pendingBackupPayload = payload
+                    _backup.value = _backup.value.copy(
+                        isImporting = false,
+                        importPreview = preview,
+                        feedback = null,
+                    )
+                },
+                onFailure = { error ->
+                    pendingBackupPayload = null
+                    _backup.value = _backup.value.copy(
+                        isImporting = false,
+                        importPreview = null,
+                        feedback = BackupScreenFeedback(
+                            "备份读取或校验失败：${error.message ?: "文件无效"}",
+                            isError = true,
+                        ),
+                    )
+                },
+            )
+        }
+    }
+
+    fun confirmBackupImport() {
+        val payload = pendingBackupPayload ?: run {
+            _backup.update {
+                it.copy(feedback = BackupScreenFeedback("没有可确认的备份，请重新选择文件。", isError = true))
+            }
+            return
+        }
+        if (backupApplyInFlight || _backup.value.importPreview == null || _backup.value.isImporting) return
+        backupApplyInFlight = true
+        _backup.update { it.copy(isImporting = true, feedback = null) }
+        viewModelScope.launch {
+            val result = captureResult { repository.applyBackupMerge(payload.expenses, payload.budgets) }
+            backupApplyInFlight = false
+            result.fold(
+                onSuccess = { applied ->
+                    pendingBackupPayload = null
+                    _backup.update {
+                        it.copy(
+                            isImporting = false,
+                            importPreview = null,
+                            feedback = BackupScreenFeedback(
+                                "恢复完成：新增 ${applied.insertedExpenses} 笔，跳过 ${applied.skippedExpenses} 笔，覆盖 ${applied.upsertedBudgets} 个月预算。",
+                                isError = false,
+                            ),
+                        )
+                    }
+                    refreshHome()
+                    if (_calendar.value.hasLoaded) refreshCalendar()
+                    if (_budget.value.hasLoaded) loadBudgetSummary(_budget.value.month)
+                },
+                onFailure = { error ->
+                    _backup.update {
+                        it.copy(
+                            isImporting = false,
+                            feedback = BackupScreenFeedback(
+                                "恢复失败，数据未完成合并：${error.message ?: "请重试"}",
+                                isError = true,
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun cancelBackupImport() {
+        if (_backup.value.isImporting || backupApplyInFlight) return
+        pendingBackupPayload = null
+        _backup.update {
+            it.copy(importPreview = null, feedback = BackupScreenFeedback("已取消本次恢复。", isError = false))
+        }
+    }
+
+    fun dismissBackupFeedback() {
+        _backup.update { it.copy(feedback = null) }
+    }
+
+    /** Activity Result may be redelivered after process recreation, when the ViewModel state is new. */
+    private fun prepareBackupPickerResult(action: BackupPickerAction): Boolean {
+        if (_screen.value != Screen.Backup) {
+            backStack.addLast(_screen.value)
+            _screen.value = Screen.Backup
+            _backup.value = BackupScreenState()
+            pendingBackupPayload = null
+        }
+        val current = _backup.value
+        if (current.isExporting || current.isImporting) {
+            return when (action) {
+                BackupPickerAction.EXPORT -> current.isExporting
+                BackupPickerAction.IMPORT -> current.isImporting
+            }
+        }
+        _backup.value = when (action) {
+            BackupPickerAction.EXPORT -> current.copy(isExporting = true, importPreview = null)
+            BackupPickerAction.IMPORT -> current.copy(isImporting = true, importPreview = null)
+        }
+        return true
     }
 
     /** 编辑：screen=Form(id)，读取中不开放空表单，失败或记录缺失时给出可理解的状态。 */
@@ -226,9 +628,16 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     /** 返回上一屏（Form→回 Detail 或 Home，按进入路径；Detail→Home）。 */
     fun back() {
         if (_screen.value is Screen.Detail && _detail.value.isDeleting) return
+        if (_screen.value is Screen.Backup &&
+            (_backup.value.isExporting || _backup.value.isImporting || backupApplyInFlight)
+        ) return
         if (_screen.value is Screen.Form) {
             originalFormValues = null
             _form.update { it.copy(confirmDiscard = false) }
+        }
+        if (_screen.value is Screen.Backup) {
+            pendingBackupPayload = null
+            _backupPickerRequest.value = null
         }
         val target = backStack.removeLastOrNull() ?: Screen.Home
         _screen.value = target
@@ -488,6 +897,7 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
                             loadDetail(editingId, feedbackMessage = "修改已保存")
                         }
                         refreshHome()
+                        refreshLinkedData()
                     } else {
                         _form.update { it.copy(saving = false, saveFailed = true) }
                     }
@@ -525,6 +935,7 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
                     _screen.value = Screen.Home
                     _home.update { it.copy(feedbackMessage = "消费已删除") }
                     refreshHome()
+                    refreshLinkedData()
                 }
 
                 result.isSuccess -> {
@@ -540,6 +951,79 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     }
 
     // ---------- 内部实现 ----------
+
+    private fun refreshCalendar() {
+        val month = _calendar.value.month
+        val generation = ++calendarRefreshGeneration
+        val range = EpochDayRange.month(month)
+        _calendar.update { it.copy(isLoading = true, loadFailed = false) }
+        viewModelScope.launch {
+            val result = captureResult {
+                repository.getDailyExpenseAggregates(range.startInclusive, range.endExclusive)
+            }
+            if (generation != calendarRefreshGeneration || _calendar.value.month != month) return@launch
+            result.fold(
+                onSuccess = { totals ->
+                    _calendar.update {
+                        it.copy(dailyTotals = totals, isLoading = false, loadFailed = false, hasLoaded = true)
+                    }
+                },
+                onFailure = {
+                    _calendar.update { it.copy(dailyTotals = emptyList(), isLoading = false, loadFailed = true) }
+                },
+            )
+        }
+    }
+
+    private fun loadBudgetSummary(month: YearMonth, feedbackMessage: String? = null) {
+        val generation = ++budgetRefreshGeneration
+        val placeholder = MonthlyBudgetSummary.calculate(month.year, month.monthValue, null, spentCents = 0L)
+        _budget.value = BudgetUiState(
+            month = month,
+            summary = placeholder,
+            isLoading = true,
+            isSaving = budgetWriteInFlight,
+            feedbackMessage = feedbackMessage,
+        )
+        viewModelScope.launch {
+            val result = captureResult {
+                val budget = repository.getMonthlyBudget(month.year, month.monthValue)
+                val spentCents = repository.getMonthlyTotal(month.year, month.monthValue)
+                MonthlyBudgetSummary.calculate(month.year, month.monthValue, budget, spentCents)
+            }
+            if (generation != budgetRefreshGeneration || _budget.value.month != month) return@launch
+            result.fold(
+                onSuccess = { summary ->
+                    _budget.update {
+                        it.copy(summary = summary, isLoading = false, loadFailed = false, hasLoaded = true)
+                    }
+                },
+                onFailure = { error ->
+                    _budget.update {
+                        it.copy(
+                            isLoading = false,
+                            loadFailed = true,
+                            feedbackMessage = "预算读取失败：${error.message ?: "请重试"}",
+                            feedbackIsError = true,
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    private fun refreshLinkedData() {
+        if (_calendar.value.hasLoaded) refreshCalendar()
+        if (_budget.value.hasLoaded) loadBudgetSummary(_budget.value.month)
+    }
+
+    private suspend fun <T> captureResult(block: suspend () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
 
     fun retryDetailLoad() {
         val current = _screen.value as? Screen.Detail ?: return
@@ -733,6 +1217,23 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
             categoryStats = emptyCategoryStats(),
             entries = emptyList(),
             isLoading = true,
+        )
+    }
+
+    private fun initialCalendar(): CalendarUiState {
+        val today = LocalDate.now()
+        return CalendarUiState(
+            month = YearMonth.from(today),
+            selectedEpochDay = today.toEpochDay(),
+            isLoading = true,
+        )
+    }
+
+    private fun initialBudget(): BudgetUiState {
+        val month = YearMonth.from(LocalDate.now())
+        return BudgetUiState(
+            month = month,
+            summary = MonthlyBudgetSummary.calculate(month.year, month.monthValue, null, spentCents = 0L),
         )
     }
 
