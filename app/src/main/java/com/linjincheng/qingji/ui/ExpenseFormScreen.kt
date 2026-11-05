@@ -113,6 +113,8 @@ fun ExpenseFormScreen(
     onDismissDiscard: () -> Unit,
     onConfirmDiscard: () -> Unit,
     onRetryEditLoad: () -> Unit = {},
+    recentCategories: List<ExpenseCategory> = emptyList(),
+    copyMode: Boolean = false,
 ) {
     // 仅日期选择器开合属于短暂的界面状态；表单数据和离开确认均来自 UiState。
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -142,7 +144,7 @@ fun ExpenseFormScreen(
                     val feedbackMessage = when {
                         state.amountError != null -> amountErrorMessage(state.amountError)
                         state.saveFailed -> "保存失败，请重试；当前填写内容仍保留。"
-                        state.saved -> "保存成功"
+                        state.saved -> if (copyMode) "已保存为新记录" else "保存成功"
                         else -> null
                     }
                     if (feedbackMessage != null) {
@@ -177,6 +179,7 @@ fun ExpenseFormScreen(
                             text = when {
                                 state.saving -> "正在保存…"
                                 state.saved -> "已保存"
+                                copyMode -> "保存为新记录"
                                 state.editingId == null -> "保存消费"
                                 else -> "保存修改"
                             },
@@ -202,18 +205,35 @@ fun ExpenseFormScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                 }
                 Text(
-                    text = if (state.editingId == null) "记一笔" else "编辑消费",
+                    text = when {
+                        copyMode -> "复制为新记录"
+                        state.editingId == null -> "记一笔"
+                        else -> "编辑消费"
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
 
+            if (copyMode) {
+                Text(
+                    text = "已沿用原金额、分类和备注；日期默认为今天，可修改后保存。",
+                    modifier = Modifier.padding(
+                        start = QingJiSpacing.md,
+                        end = QingJiSpacing.md,
+                        bottom = QingJiSpacing.xs,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             when {
-                state.editingId != null && state.isLoading -> FormStatusContent(
+                state.isLoading -> FormStatusContent(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    title = "正在读取消费记录…",
-                    message = "读取完成后即可继续编辑。",
+                    title = if (copyMode) "正在准备复制记录…" else "正在读取消费记录…",
+                    message = if (copyMode) "读取完成后会保留原记录，并创建一条新记录。" else "读取完成后即可继续编辑。",
                     showProgress = true,
                 )
 
@@ -285,6 +305,32 @@ fun ExpenseFormScreen(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val recentCategoryList = remember(recentCategories) {
+                        recentCategories.distinct().take(3)
+                    }
+                    if (recentCategoryList.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs)) {
+                            Text(
+                                text = "最近使用",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
+                                verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
+                            ) {
+                                recentCategoryList.forEach { category ->
+                                    RecentCategoryOption(
+                                        category = category,
+                                        selected = state.selectedCategory == category,
+                                        onClick = { onCategorySelect(category) },
+                                        enabled = !state.saving,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     SectionTitle(text = "消费分类")
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
@@ -477,6 +523,58 @@ private fun FormStatusContent(
         if (onAction != null) {
             Spacer(Modifier.size(QingJiSpacing.sm))
             TextButton(onClick = onAction) { Text(actionLabel) }
+        }
+    }
+}
+
+@Composable
+private fun RecentCategoryOption(
+    category: ExpenseCategory,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean,
+) {
+    val accent = categoryAccent(category)
+    Surface(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                onClick = onClick,
+                role = Role.RadioButton,
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) accent else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CategoryIconBadge(
+                category = category,
+                modifier = Modifier.size(26.dp).clearAndSetSemantics { },
+                size = 26.dp,
+            )
+            Text(
+                text = category.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            )
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
