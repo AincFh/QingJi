@@ -34,3 +34,19 @@
 - 真机验收覆盖一台 Android 16 设备和有限的屏幕/字体组合；未覆盖 Android 8–15 机型矩阵、TalkBack 深度操作、OEM 备份/换机恢复行为。
 - 最终连续演示视频尚未录制。录制流程和 HR 讲解要点见[演示提纲](demo-and-hr-brief.md)。
 - 本记录验证的是最终 Debug APK，不代表签名 Release 包或商店分发验收。
+
+## v6 集成检查点（未完成最终验收）
+
+日期：2026-11-05（Asia/Shanghai）
+
+源码检查点：`0cf9c736e807c19dfbe417c99322bb5d6b774893`（`codex/qingji-v6-integration`）。之后的 `4881ade` 仅更新了 v6 进度/产品契约文档，没有改动代码。
+
+- 环境：JDK 23（`D:\Java\jdk-23`）、Android SDK（`C:\Users\ljc24\AppData\Local\Android\Sdk`）；从 ASCII junction `D:\QingJiV6Integration` 启动，避开中文目录下 Gradle test worker 的类加载问题。
+- 命令：`.\gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`。
+- 结果：`BUILD SUCCESSFUL in 2m 39s`；JVM 单测 70 项通过，0 失败、0 错误、0 跳过；assembleDebug 成功；lintDebug 成功。
+- 中间 APK：`app/build/outputs/apk/debug/app-debug.apk`，10,641,645 bytes。它是中间检查点，不是最终可交付包。
+- SQLite instrumentation 源码编译：`:app:assembleDebugAndroidTest` 成功。`:app:connectedDebugAndroidTest` 在设备安装测试 APK 时返回 `INSTALL_FAILED_USER_RESTRICTED`，执行 0 项；迁移、预算持久化和事务合并仍标记 **NOT VERIFIED**。
+- 当前 Android 16 设备没有安装本检查点 APK，也没有重置应用数据；还未执行本轮预算、日历、图表钻取、复制、SAF 往返、进程重启和 TalkBack 手工验收。
+- 当前已知阻塞：`MainActivity` 尚未接入图表筛选/复制/预算/日历/备份入口；预算、日历和备份页面仍在独立工作分支；全量 Android instrumentation 被设备策略拦截。
+
+上述结果仅证明该源码检查点可构建、lint 通过及 70 个 JVM 测试通过。不得将其描述为 QingJi v6 最终验收通过或已完成真机验证。
