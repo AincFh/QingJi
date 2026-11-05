@@ -67,6 +67,9 @@ class MainActivity : ComponentActivity() {
                 appPreferences = next
             }
             val screen by viewModel.screen.collectAsStateWithLifecycle()
+            val homeState by viewModel.home.collectAsStateWithLifecycle()
+            val formState by viewModel.form.collectAsStateWithLifecycle()
+            val detailState by viewModel.detail.collectAsStateWithLifecycle()
             val homeSnackbarHostState = remember { SnackbarHostState() }
             LaunchedEffect(selectedTab) {
                 viewModel.onHistoryTabSelected(showAllHistory = selectedTab == MainTab.RECORDS)
@@ -104,7 +107,6 @@ class MainActivity : ComponentActivity() {
                 }
                 when (val current = screen) {
                     is Screen.Home -> {
-                        val homeState by viewModel.home.collectAsStateWithLifecycle()
                         LaunchedEffect(homeState.feedbackMessage) {
                             homeState.feedbackMessage?.let { message ->
                                 homeSnackbarHostState.showSnackbar(message)
@@ -140,6 +142,14 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onRetryHome = viewModel::retryHome,
                                         amountsHidden = appPreferences.hideAmounts,
+                                        onOpenDateDetails = { epochDay ->
+                                            viewModel.openDateDetails(epochDay)
+                                            selectedTabIndex = MainTab.RECORDS.ordinal
+                                        },
+                                        onOpenCategoryDetails = { category ->
+                                            viewModel.openCategoryDetails(category)
+                                            selectedTabIndex = MainTab.RECORDS.ordinal
+                                        },
                                     )
 
                                     MainTab.RECORDS -> RecordsScreen(
@@ -160,6 +170,14 @@ class MainActivity : ComponentActivity() {
                                         onRetry = viewModel::retryHome,
                                         onOpenSettings = { selectedTabIndex = MainTab.SETTINGS.ordinal },
                                         amountsHidden = appPreferences.hideAmounts,
+                                        onOpenDateDetails = { epochDay ->
+                                            viewModel.openDateDetails(epochDay)
+                                            selectedTabIndex = MainTab.RECORDS.ordinal
+                                        },
+                                        onOpenCategoryDetails = { category ->
+                                            viewModel.openCategoryDetails(category)
+                                            selectedTabIndex = MainTab.RECORDS.ordinal
+                                        },
                                     )
 
                                     MainTab.SETTINGS -> SettingsScreen(
@@ -192,7 +210,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     is Screen.Form -> ExpenseFormScreen(
-                        state = viewModel.form.collectAsStateWithLifecycle().value,
+                        state = formState,
                         onAmountChange = viewModel::onAmountChange,
                         onCategorySelect = viewModel::onCategorySelect,
                         onDateChange = viewModel::onDateChange,
@@ -201,11 +219,13 @@ class MainActivity : ComponentActivity() {
                         onBackRequested = viewModel::requestFormBack,
                         onDismissDiscard = viewModel::dismissDiscardDialog,
                         onConfirmDiscard = viewModel::confirmDiscardChanges,
-                        onRetryEditLoad = viewModel::retryEditLoad,
+                        onRetryEditLoad = viewModel::retryFormLoad,
+                        recentCategories = homeState.recentCategories,
+                        copyMode = formState.copyMode,
                     )
 
                     is Screen.Detail -> ExpenseDetailScreen(
-                        state = viewModel.detail.collectAsStateWithLifecycle().value,
+                        state = detailState,
                         onEdit = viewModel::openEdit,
                         onDeleteClick = viewModel::onDeleteClick,
                         onDismissDeleteDialog = viewModel::onDismissDeleteDialog,
@@ -215,6 +235,7 @@ class MainActivity : ComponentActivity() {
                         onRetryDelete = viewModel::onConfirmDelete,
                         onClearFeedback = viewModel::clearDetailFeedback,
                         amountsHidden = appPreferences.hideAmounts,
+                        onCopy = viewModel::openCopy,
                     )
                 }
             }

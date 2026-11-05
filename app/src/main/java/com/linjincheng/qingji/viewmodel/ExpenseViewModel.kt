@@ -67,6 +67,9 @@ data class HomeUiState(
     val loadFailed: Boolean = false,
     val feedbackMessage: String? = null,
     val hasLoaded: Boolean = false,
+    val recentCategories: List<ExpenseCategory> = emptyList(),
+    val selectedTrendEpochDay: Long? = null,
+    val selectedCategory: ExpenseCategory? = null,
 ) {
     /** Compatibility projections for existing screen APIs; expenseFilter remains the source of truth. */
     val searchText: String get() = expenseFilter.keyword
@@ -91,6 +94,8 @@ data class FormUiState(
     val loadFailed: Boolean = false,
     val notFound: Boolean = false,
     val dateError: Boolean = false,
+    val copyMode: Boolean = false,
+    val copySourceId: Long? = null,
 )
 
 /** 详情状态：notFound=true 表示记录不存在（界面显示提示并可返回，不崩溃）。 */
@@ -175,12 +180,40 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
         }
     }
 
+    /** 复制从详情进入：保留来源记录作为返回目标，复制表单始终按新增处理。 */
+    fun openCopy(id: Long) {
+        val detail = _detail.value
+        if (_screen.value !is Screen.Detail || detail.entry?.id != id || detail.isDeleting) return
+        backStack.addLast(_screen.value)
+        val initial = initialForm().copy(copyMode = true, copySourceId = id, isLoading = true)
+        _form.value = initial
+        originalFormValues = null
+        _screen.value = Screen.Form(null)
+        viewModelScope.launch { loadCopyEntry(id) }
+    }
+
     /** 重试编辑记录的读取；保存仍不可用，直到数据库数据成功载入。 */
     fun retryEditLoad() {
+        retryFormLoad()
+    }
+
+    /** 重试当前编辑或复制表单的源记录读取。 */
+    fun retryFormLoad() {
+        if (_form.value.copyMode) {
+            retryCopyLoad()
+            return
+        }
         val id = _form.value.editingId ?: return
         if (_screen.value != Screen.Form(id)) return
         _form.update { it.copy(isLoading = true, loadFailed = false, notFound = false) }
         viewModelScope.launch { loadEditEntry(id) }
+    }
+
+    private fun retryCopyLoad() {
+        val id = _form.value.copySourceId ?: return
+        if (_screen.value != Screen.Form(null)) return
+        _form.update { it.copy(isLoading = true, loadFailed = false, notFound = false) }
+        viewModelScope.launch { loadCopyEntry(id) }
     }
 
     /** 详情：screen=Detail(id) 并异步加载；记录不存在 → notFound=true，不崩溃。 */
@@ -238,6 +271,31 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
         setExpenseFilter(filter, forceAllHistory = true)
     }
 
+    /** 图表选日带入单日区间，并保留账单上已有的类别和关键词条件。 */
+    fun openDateDetails(epochDay: Long) {
+        openFilteredLedger(_home.value.expenseFilter.copy(dateRange = EpochDayRange.day(epochDay)))
+    }
+
+    /** 分类图表钻取限定在当前分析月份，并保留已有关键词条件。 */
+    fun openCategoryDetails(category: ExpenseCategory) {
+        val current = _home.value
+        openFilteredLedger(
+            ExpenseFilter(
+                dateRange = EpochDayRange.month(YearMonth.of(current.year, current.month)),
+                category = category,
+                keyword = current.expenseFilter.keyword,
+            ),
+        )
+    }
+
+    fun selectTrendEpochDay(epochDay: Long?) {
+        _home.update { it.copy(selectedTrendEpochDay = epochDay) }
+    }
+
+    fun selectCategory(category: ExpenseCategory?) {
+        _home.update { it.copy(selectedCategory = category) }
+    }
+
     fun onExpenseDateRangeChange(range: EpochDayRange?) {
         setExpenseFilter(_home.value.expenseFilter.copy(dateRange = range))
     }
@@ -293,6 +351,8 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
             comparisonLabel = "较上月",
             dailyTrend = emptyList(),
             dailyTrend30 = emptyList(),
+            selectedTrendEpochDay = null,
+            selectedCategory = null,
             hasMonthEntries = false,
             monthEntryCount = 0,
             loadFailed = false,
@@ -404,7 +464,17 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
                     if (success) {
                         _form.update { it.copy(saving = false, saved = true) }
                         originalFormValues = null
-                        if (editingId == null) {
+                        if (form.copyMode) {
+                            val target = backStack.removeLastOrNull()
+                            if (target is Screen.Detail && target.expenseId == form.copySourceId) {
+                                _screen.value = target
+                                loadDetail(target.expenseId, feedbackMessage = "已复制为新记录")
+                            } else {
+                                backStack.clear()
+                                _screen.value = Screen.Home
+                                _home.update { it.copy(feedbackMessage = "已复制为新记录") }
+                            }
+                        } else if (editingId == null) {
                             backStack.clear()
                             _screen.value = Screen.Home
                             _home.update { it.copy(feedbackMessage = "消费已保存") }
@@ -497,6 +567,35 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
                     loadFailed = false,
                     notFound = false,
                 )
+            }
+        }
+    }
+
+    private suspend fun loadCopyEntry(id: Long) {
+        val result = runCatching { repository.getExpenseById(id) }
+        if (_screen.value != Screen.Form(null) ||
+            !_form.value.copyMode ||
+            _form.value.copySourceId != id
+        ) return
+        val entry = result.getOrNull()
+        when {
+            result.isFailure -> _form.update { it.copy(isLoading = false, loadFailed = true) }
+            entry == null -> _form.update { it.copy(isLoading = false, notFound = true) }
+            else -> {
+                val todayValues = entry.toFormValues().copy(epochDay = DateUtils.todayEpochDay())
+                originalFormValues = todayValues
+                _form.update {
+                    it.copy(
+                        editingId = null,
+                        amountText = todayValues.amountText,
+                        selectedCategory = todayValues.selectedCategory,
+                        epochDay = todayValues.epochDay,
+                        note = todayValues.note,
+                        isLoading = false,
+                        loadFailed = false,
+                        notFound = false,
+                    )
+                }
             }
         }
     }
@@ -598,6 +697,11 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
                     ExpenseAnalytics.availableMonths(result.allEntries) +
                         listOfNotNull(current.expenseFilter.dateRange?.asYearMonthOrNull())
                 ).distinct().sortedDescending(),
+                recentCategories = result.allEntries
+                    .sortedByDescending(ExpenseEntry::updatedAt)
+                    .distinctBy(ExpenseEntry::category)
+                    .take(3)
+                    .map(ExpenseEntry::category),
                 previousMonthTotalCents = result.previousMonthTotalCents,
                 comparisonCurrentTotalCents = result.comparisonCurrentTotalCents,
                 comparisonLabel = result.comparisonLabel,
