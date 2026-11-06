@@ -183,6 +183,7 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onRetryHome = viewModel::retryHome,
                                         amountsHidden = appPreferences.hideAmounts,
+                                        monthlyBudgetCents = appPreferences.monthlyBudgetCents,
                                     )
 
                                     MainTab.RECORDS -> RecordsScreen(
@@ -219,6 +220,7 @@ class MainActivity : ComponentActivity() {
                                         onBack = { selectedTabIndex = MainTab.HOME.ordinal },
                                         showBackButton = false,
                                         onExportCsv = requestCsvExport,
+                                        onMonthlyBudgetChange = { savePreferences(appPreferences.copy(monthlyBudgetCents = it)) },
                                     )
                                 }
                             }
@@ -234,6 +236,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onBack = viewModel::back,
                         onExportCsv = requestCsvExport,
+                        onMonthlyBudgetChange = { savePreferences(appPreferences.copy(monthlyBudgetCents = it)) },
                     )
 
                     is Screen.Form -> ExpenseFormScreen(
