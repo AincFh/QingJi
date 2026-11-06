@@ -27,7 +27,7 @@ class MonthlyBudgetTest {
         assertEquals(BudgetStatus.WITHIN, state.status)
         assertEquals(300000L, state.remainingCents)
         assertEquals(0L, state.exceededCents)
-        assertEquals(0f, state.progress)
+        assertEquals(0f, state.progress, 0.00001f)
     }
 
     @Test fun spendingExactlyOneCentRemainsLossless() {
@@ -55,7 +55,7 @@ class MonthlyBudgetTest {
         assertEquals(BudgetStatus.EXCEEDED, over.status)
         assertEquals(1L, over.exceededCents)
         assertEquals(0L, over.remainingCents)
-        assertEquals(1f, over.progress)
+        assertEquals(1f, over.progress, 0.00001f)
     }
 
     @Test fun negativeOrInvalidAggregatedSpendingCannotInventRemainingDebt() {
@@ -67,7 +67,7 @@ class MonthlyBudgetTest {
     @Test fun hugeMonthlyTotalsRemainFiniteAndBounded() {
         val state = MonthlyBudget.calculate(1, Long.MAX_VALUE)!!
         assertEquals(Long.MAX_VALUE - 1, state.exceededCents)
-        assertEquals(1f, state.progress)
+        assertEquals(1f, state.progress, 0.00001f)
         assertEquals(BudgetStatus.EXCEEDED, state.status)
     }
 
