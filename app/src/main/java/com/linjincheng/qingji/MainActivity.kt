@@ -2,6 +2,7 @@ package com.linjincheng.qingji
 
 import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.linjincheng.qingji.data.ExpensePreferences
 import com.linjincheng.qingji.data.ExpenseBackupCodec
+import com.linjincheng.qingji.data.ExpenseCsvCodec
 import com.linjincheng.qingji.data.QingJiPreferences
 import com.linjincheng.qingji.data.ThemeMode
 import com.linjincheng.qingji.ui.BackupScreen
@@ -91,6 +93,35 @@ class MainActivity : ComponentActivity() {
             val backupState by viewModel.backup.collectAsStateWithLifecycle()
             val backupPickerRequest by viewModel.backupPickerRequest.collectAsStateWithLifecycle()
             val homeSnackbarHostState = remember { SnackbarHostState() }
+            // A one-way, privacy-preserving report. Android's own document
+            // picker decides where the CSV lives; no storage permission needed.
+            val exportCsvLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument(ExpenseCsvCodec.MIME_TYPE),
+            ) { uri ->
+                if (uri != null) {
+                    viewModel.exportExpensesCsv(
+                        writeDocument = { bytes ->
+                            withContext(Dispatchers.IO) {
+                                val output = contentResolver.openOutputStream(uri, "wt")
+                                    ?: error("系统无法打开选定的 CSV 文件")
+                                output.use { stream ->
+                                    stream.write(bytes)
+                                    stream.flush()
+                                }
+                            }
+                        },
+                        onComplete = { _, message ->
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        },
+                    )
+                }
+            }
+            val requestCsvExport: () -> Unit = {
+                val date = LocalDate.now()
+                exportCsvLauncher.launch(
+                    "qingji_expenses_${date.year}_${date.monthValue}_${date.dayOfMonth}.csv",
+                )
+            }
             val exportBackupLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.CreateDocument("application/json"),
             ) { uri ->
@@ -271,6 +302,7 @@ class MainActivity : ComponentActivity() {
                                         onOpenBudget = viewModel::openBudget,
                                         onExportBackup = viewModel::requestBackupExport,
                                         onRestoreBackup = viewModel::requestBackupImport,
+                                        onExportCsv = requestCsvExport,
                                         onBack = { selectedTabIndex = MainTab.HOME.ordinal },
                                         showBackButton = false,
                                     )
@@ -290,6 +322,7 @@ class MainActivity : ComponentActivity() {
                         onOpenBudget = viewModel::openBudget,
                         onExportBackup = viewModel::requestBackupExport,
                         onRestoreBackup = viewModel::requestBackupImport,
+                        onExportCsv = requestCsvExport,
                         onBack = viewModel::back,
                     )
 
