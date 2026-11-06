@@ -27,6 +27,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +37,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -70,6 +75,27 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val versionName = remember(context) { readAppVersionName(context) }
+    var csvExportConfirmation by remember { mutableStateOf(false) }
+    if (csvExportConfirmation && onExportCsv != null) {
+        AlertDialog(
+            onDismissRequest = { csvExportConfirmation = false },
+            title = { Text("确认导出全部账单？") },
+            text = {
+                Text(
+                    "CSV 是包含所有账单真实金额、消费日期和备注的明文文件，即使界面开启了隐藏金额。请选择可信的位置保存，勿在公共设备分享。导出只读取本机数据，不上传网络，也不会修改流水。CSV 无法用于备份恢复。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    csvExportConfirmation = false
+                    onExportCsv()
+                }) { Text("继续选择保存位置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { csvExportConfirmation = false }) { Text("取消") }
+            },
+        )
+    }
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         Column(
             modifier = Modifier
@@ -339,8 +365,8 @@ fun SettingsScreen(
                                     SettingsDivider(startIndent = QingJiSpacing.md)
                                     SettingsActionRow(
                                         title = "导出账单 CSV",
-                                        description = "使用系统文件保存器导出全部账单，可在 Excel 中打开。仅供查看和分析，不能替代可恢复的 JSON 备份；文件可能包含私人支出与备注，请妥善保管。",
-                                        onClick = onExportCsv,
+                                        description = "导出全部记录供 Excel 分析；即使开启「隐藏金额」，CSV 中也会包含真实金额与备注。CSV 不能代替 JSON 恢复备份。",
+                                        onClick = { csvExportConfirmation = true },
                                     )
                                 }
                             }
