@@ -16,10 +16,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # GitHub ubuntu-latest already provides ANDROID_HOME and the SDK.
+      # Do not invoke setup-android@v3: its install of the deleted "tools"
+      # package fails on current cmdline-tools releases.
       - uses: gradle/actions/setup-gradle@v4
-      - name: Install matching Android SDK tools
-        run: sdkmanager --install "platforms;android-35" "build-tools;36.0.0"
+      - name: Verify matching Android SDK and install missing components only
+        run: |
+          test -n "${ANDROID_HOME:-}" || { echo "ANDROID_HOME missing"; exit 1; }
+          if [ ! -d "$ANDROID_HOME/platforms/android-35" ] || [ ! -d "$ANDROID_HOME/build-tools/36.0.0" ]; then
+            "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0"
+          fi
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
       - name: Use official Gradle distribution mirror in CI
         run: |
           sed -i 's#mirrors.cloud.tencent.com/gradle/#services.gradle.org/distributions/#' gradle/wrapper/gradle-wrapper.properties
