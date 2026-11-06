@@ -1,6 +1,7 @@
 package com.linjincheng.qingji.data
 
 import android.content.Context
+import com.linjincheng.qingji.util.MonthlyBudget
 
 enum class ThemeMode(val label: String) {
     SYSTEM("跟随系统"),
@@ -12,6 +13,7 @@ data class QingJiPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val hideAmounts: Boolean = false,
     val defaultCategory: ExpenseCategory = ExpenseCategory.FOOD,
+    val monthlyBudgetCents: Long? = null,
 )
 
 /** App-level preferences use Android SharedPreferences; no additional storage dependency is needed. */
@@ -26,14 +28,20 @@ class ExpensePreferences(context: Context) {
         defaultCategory = ExpenseCategory.fromCode(
             store.getString(KEY_DEFAULT_CATEGORY, ExpenseCategory.FOOD.code) ?: ExpenseCategory.FOOD.code,
         ),
+        monthlyBudgetCents = MonthlyBudget.sanitize(
+            if (store.contains(KEY_MONTHLY_BUDGET)) store.getLong(KEY_MONTHLY_BUDGET, 0L) else null,
+        ),
     )
 
     fun write(preferences: QingJiPreferences) {
-        store.edit()
+        val edit = store.edit()
             .putString(KEY_THEME, preferences.themeMode.name)
             .putBoolean(KEY_HIDE_AMOUNTS, preferences.hideAmounts)
             .putString(KEY_DEFAULT_CATEGORY, preferences.defaultCategory.code)
-            .apply()
+        val budget = MonthlyBudget.sanitize(preferences.monthlyBudgetCents)
+        if (budget == null) edit.remove(KEY_MONTHLY_BUDGET)
+        else edit.putLong(KEY_MONTHLY_BUDGET, budget)
+        edit.apply()
     }
 
     private companion object {
@@ -41,5 +49,6 @@ class ExpensePreferences(context: Context) {
         const val KEY_THEME = "theme_mode"
         const val KEY_HIDE_AMOUNTS = "hide_amounts"
         const val KEY_DEFAULT_CATEGORY = "default_category"
+        const val KEY_MONTHLY_BUDGET = "monthly_budget_cents"
     }
 }
