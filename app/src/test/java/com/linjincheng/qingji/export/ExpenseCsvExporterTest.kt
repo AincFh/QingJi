@@ -86,9 +86,8 @@ class ExpenseCsvExporterTest {
 
     @Test fun normalTextIsNotModifiedBeyondCsvQuoting() {
         assertEquals("\"普通备注\"", ExpenseCsvExporter.safeCell("普通备注"))
-        assertEquals("\"\"\"", ExpenseCsvExporter.safeCell("\""))
         assertEquals("\"\"\"\"", ExpenseCsvExporter.safeCell("\""))
-    }
+        assertEquals("\"  中文\"", ExpenseCsvExporter.safeCell("  中文"))
 
     @Test fun utf8BomIsIncludedForChineseExcelCompatibility() {
         val bytes = ExpenseCsvExporter.toUtf8Csv(listOf(entry()))
