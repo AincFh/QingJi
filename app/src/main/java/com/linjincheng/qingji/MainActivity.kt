@@ -1,6 +1,9 @@
 package com.linjincheng.qingji
 
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -17,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.linjincheng.qingji.data.ExpensePreferences
 import com.linjincheng.qingji.data.QingJiPreferences
 import com.linjincheng.qingji.data.ThemeMode
+import com.linjincheng.qingji.export.ExpenseCsvExporter
 import com.linjincheng.qingji.ui.ExpenseDetailScreen
 import com.linjincheng.qingji.ui.ExpenseFormScreen
 import com.linjincheng.qingji.ui.HomeScreen
@@ -41,6 +46,10 @@ import com.linjincheng.qingji.ui.SettingsScreen
 import com.linjincheng.qingji.ui.theme.QingJiTheme
 import com.linjincheng.qingji.viewmodel.ExpenseViewModel
 import com.linjincheng.qingji.viewmodel.Screen
+import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Single-activity host for the tab shell and secondary form/detail routes.
@@ -68,6 +77,40 @@ class MainActivity : ComponentActivity() {
             }
             val screen by viewModel.screen.collectAsStateWithLifecycle()
             val homeSnackbarHostState = remember { SnackbarHostState() }
+            val exportScope = rememberCoroutineScope()
+            // Registered unconditionally: SAF is only launched after the user
+            // explicitly confirms a CSV export in Settings.
+            val csvExportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("text/csv"),
+            ) { uri ->
+                if (uri != null) {
+                    exportScope.launch {
+                        val result = runCatching {
+                            val entries = viewModel.getAllExpensesForExport()
+                            val bytes = withContext(Dispatchers.Default) {
+                                ExpenseCsvExporter.toUtf8Csv(entries)
+                            }
+                            withContext(Dispatchers.IO) {
+                                contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+                                    stream.write(bytes)
+                                    stream.flush()
+                                } ?: error("Cannot open selected CSV destination")
+                            }
+                            entries.size
+                        }
+                        val message = result.fold(
+                            onSuccess = { "已导出 " + it + " 条消费记录到所选文件" },
+                            onFailure = { "导出失败，未修改本机账单，请重新选择文件位置" },
+                        )
+                        Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            val requestCsvExport = {
+                csvExportLauncher.launch(
+                    "QingJi-expenses-" + LocalDate.now().toString() + ".csv"
+                )
+            }
             LaunchedEffect(selectedTab) {
                 viewModel.onHistoryTabSelected(showAllHistory = selectedTab == MainTab.RECORDS)
             }
@@ -175,6 +218,7 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onBack = { selectedTabIndex = MainTab.HOME.ordinal },
                                         showBackButton = false,
+                                        onExportCsv = requestCsvExport,
                                     )
                                 }
                             }
@@ -189,6 +233,7 @@ class MainActivity : ComponentActivity() {
                             savePreferences(appPreferences.copy(defaultCategory = it))
                         },
                         onBack = viewModel::back,
+                        onExportCsv = requestCsvExport,
                     )
 
                     is Screen.Form -> ExpenseFormScreen(
