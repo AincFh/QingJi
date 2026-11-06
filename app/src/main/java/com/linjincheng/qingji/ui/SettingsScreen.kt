@@ -32,6 +32,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -41,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +58,8 @@ import com.linjincheng.qingji.data.QingJiPreferences
 import com.linjincheng.qingji.data.ThemeMode
 import com.linjincheng.qingji.ui.components.CategoryIconBadge
 import com.linjincheng.qingji.ui.theme.QingJiSpacing
+import com.linjincheng.qingji.util.AmountParseResult
+import com.linjincheng.qingji.util.MoneyUtils
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -66,10 +71,15 @@ fun SettingsScreen(
     onBack: () -> Unit,
     showBackButton: Boolean = true,
     onExportCsv: () -> Unit,
+    onMonthlyBudgetChange: (Long?) -> Unit,
 ) {
     val context = LocalContext.current
     val versionName = remember(context) { readAppVersionName(context) }
     var confirmExport by remember { mutableStateOf(false) }
+    var budgetText by remember(preferences.monthlyBudgetCents) {
+        mutableStateOf(preferences.monthlyBudgetCents?.let(MoneyUtils::formatCents) ?: "")
+    }
+    var budgetError by remember(preferences.monthlyBudgetCents) { mutableStateOf<String?>(null) }
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         Column(
             modifier = Modifier
@@ -254,6 +264,73 @@ fun SettingsScreen(
                                                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
                                             ),
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm)) {
+                    SettingsSectionTitle("月度预算")
+                    SettingsCard {
+                        Column(
+                            modifier = Modifier.padding(QingJiSpacing.md),
+                            verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
+                        ) {
+                            Text(
+                                text = "每月支出目标",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "设定一个每月重复使用的上限。首页会按你当前查看的月份，使用真实 SQLite 支出计算剩余预算、使用率与超支提示。不会自动扣款。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedTextField(
+                                value = budgetText,
+                                onValueChange = { budgetText = it; budgetError = null },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("预算金额（元）") },
+                                placeholder = { Text("例如：3000.00") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                isError = budgetError != null,
+                                supportingText = {
+                                    if (budgetError != null) {
+                                        Text(budgetError ?: "")
+                                    } else {
+                                        Text("请输入 0.01–999999.99 元；仅保存在本机")
+                                    }
+                                },
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Button(onClick = {
+                                    when (val result = MoneyUtils.parseAmountToCents(budgetText)) {
+                                        is AmountParseResult.Valid -> {
+                                            onMonthlyBudgetChange(result.cents)
+                                            budgetError = null
+                                        }
+                                        is AmountParseResult.Invalid -> {
+                                            budgetError = "预算须为 0.01–999999.99 元的有效金额，最多两位小数"
+                                        }
+                                    }
+                                }) {
+                                    Text("保存月度预算")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        onMonthlyBudgetChange(null)
+                                        budgetText = ""
+                                        budgetError = null
+                                    },
+                                    enabled = preferences.monthlyBudgetCents != null,
+                                ) {
+                                    Text("取消预算")
                                 }
                             }
                         }
