@@ -140,6 +140,12 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
         refreshHome()
     }
 
+    /**
+     * Fetch a fresh SQLite snapshot only after the user has chosen an export
+     * destination. Do not export the filtered/masked UI list or cached state.
+     */
+    suspend fun getAllExpensesForExport(): List<ExpenseEntry> = repository.getAllExpenses()
+
     // ---------- 导航事件 ----------
 
     /** 新增：screen=Form(null)，表单重置为金额空 / 分类 FOOD / 日期今天 / 备注空。 */
