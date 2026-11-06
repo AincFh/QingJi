@@ -106,6 +106,7 @@ fun HomeScreen(
     onOpenAllRecords: () -> Unit,
     onRetryHome: () -> Unit = {},
     amountsHidden: Boolean = false,
+    monthlyBudgetCents: Long? = null,
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -148,6 +149,16 @@ fun HomeScreen(
 
             if (state.hasLoaded && !state.loadFailed) {
                 item { MonthlyOverview(state = state, amountsHidden = amountsHidden) }
+                if (monthlyBudgetCents != null) {
+                    item {
+                        MonthlyBudgetCard(
+                            budgetCents = monthlyBudgetCents,
+                            spentCents = state.totalCents,
+                            monthTitle = state.monthTitle,
+                            amountsHidden = amountsHidden,
+                        )
+                    }
+                }
                 item {
                     DailyExpenseTrend(
                         days = state.dailyTrend,
