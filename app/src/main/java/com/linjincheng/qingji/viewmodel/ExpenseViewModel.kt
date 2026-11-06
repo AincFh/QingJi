@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.linjincheng.qingji.data.ExpenseCategory
+import com.linjincheng.qingji.data.ExpenseCsvCodec
 import com.linjincheng.qingji.data.ExpenseBackupCodec
 import com.linjincheng.qingji.data.ExpenseBackupPayload
 import com.linjincheng.qingji.data.ExpenseDatabaseHelper
@@ -204,6 +205,7 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
     private var budgetWriteInFlight = false
     private var backupPickerRequestId = 0L
     private var backupExportInFlight = false
+    private var csvExportInFlight = false
     private var backupImportReadInFlight = false
     private var backupApplyInFlight = false
     private var pendingBackupPayload: ExpenseBackupPayload? = null
@@ -383,6 +385,36 @@ class ExpenseViewModel(private val repository: ExpenseRepository) : ViewModel() 
         _backup.update { BackupScreenState() }
         if (_screen.value != Screen.Backup) backStack.addLast(_screen.value)
         _screen.value = Screen.Backup
+    }
+
+    /**
+     * User-triggered, local-only CSV report. No cloud call or database writes.
+     * The caller supplies the system document's output stream and final UX
+     * feedback. JSON backup remains the ONLY restorable format.
+     */
+    fun exportExpensesCsv(
+        writeDocument: suspend (ByteArray) -> Unit,
+        onComplete: (Boolean, String) -> Unit,
+    ) {
+        if (csvExportInFlight) {
+            onComplete(false, "已有账单导出正在进行。")
+            return
+        }
+        csvExportInFlight = true
+        viewModelScope.launch {
+            val result = captureResult {
+                val expenses = repository.getAllExpenses()
+                writeDocument(ExpenseCsvCodec.encode(expenses))
+                expenses.size
+            }
+            csvExportInFlight = false
+            result.fold(
+                onSuccess = { count -> onComplete(true, "已导出 $count 条账单 CSV。") },
+                onFailure = { error ->
+                    onComplete(false, "CSV 导出失败：${error.message ?: "无法写入文件"}")
+                },
+            )
+        }
     }
 
     fun requestBackupExport() = requestBackupPicker(BackupPickerAction.EXPORT)
