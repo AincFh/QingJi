@@ -25,6 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +38,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -59,9 +65,11 @@ fun SettingsScreen(
     onDefaultCategoryChange: (ExpenseCategory) -> Unit,
     onBack: () -> Unit,
     showBackButton: Boolean = true,
+    onExportCsv: () -> Unit,
 ) {
     val context = LocalContext.current
     val versionName = remember(context) { readAppVersionName(context) }
+    var confirmExport by remember { mutableStateOf(false) }
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         Column(
             modifier = Modifier
@@ -256,6 +264,34 @@ fun SettingsScreen(
                     SettingsSectionTitle("数据与关于")
                     SettingsCard {
                         Column(
+                            modifier = Modifier.padding(QingJiSpacing.md),
+                            verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
+                        ) {
+                            Text(
+                                text = "导出所有消费账单",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "导出完整 SQLite 消费流水为 UTF-8 CSV，可在 Excel 等表格工具中查看。只在你确认后打开系统文件选择器，不经网络，不删除原始记录。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "注意：导出文件含全部消费金额、日期和备注，即使当前开启了隐藏金额。请只保存到可信位置。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Button(
+                                onClick = { confirmExport = true },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("导出全部账单 · CSV")
+                            }
+                        }
+                    }
+                    SettingsCard {
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Row(
@@ -310,6 +346,24 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+    if (confirmExport) {
+        AlertDialog(
+            onDismissRequest = { confirmExport = false },
+            title = { Text("确认导出全部账单？") },
+            text = {
+                Text("将读取所有本机消费记录，并在你选择的文件位置保存明文 CSV，包含真实金额和备注。导出不会上传、修改或删除账单。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmExport = false
+                    onExportCsv()
+                }) { Text("选择文件位置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmExport = false }) { Text("取消") }
+            },
+        )
     }
 }
 
