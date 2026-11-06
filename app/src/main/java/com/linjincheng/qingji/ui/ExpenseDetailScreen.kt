@@ -43,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -79,6 +81,7 @@ fun ExpenseDetailScreen(
     onRetryDelete: () -> Unit = onConfirmDelete,
     onClearFeedback: () -> Unit = {},
     amountsHidden: Boolean = false,
+    onCopy: ((Long) -> Unit)? = null,
 ) {
     val entry = state.entry
     val snackbarHostState = remember { SnackbarHostState() }
@@ -97,40 +100,62 @@ fun ExpenseDetailScreen(
                     color = MaterialTheme.colorScheme.surface,
                     shadowElevation = 6.dp,
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
                             .padding(horizontal = QingJiSpacing.md, vertical = QingJiSpacing.sm),
-                        horizontalArrangement = Arrangement.spacedBy(QingJiSpacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
                     ) {
-                        Button(
-                            onClick = { onEdit(entry.id) },
-                            enabled = !state.isDeleting,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp),
-                            shape = MaterialTheme.shapes.large,
-                        ) {
-                            Icon(Icons.Filled.Edit, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text("编辑")
+                        if (onCopy != null) {
+                            OutlinedButton(
+                                onClick = { onCopy(entry.id) },
+                                enabled = !state.isDeleting,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                                shape = MaterialTheme.shapes.large,
+                            ) {
+                                Text("复制为新记录")
+                            }
                         }
-                        OutlinedButton(
-                            onClick = onDeleteClick,
-                            enabled = !state.isDeleting,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp),
-                            shape = MaterialTheme.shapes.large,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Icon(Icons.Filled.Delete, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(if (state.isDeleting) "正在删除…" else "删除")
+                        Row(horizontalArrangement = Arrangement.spacedBy(QingJiSpacing.sm)) {
+                            Button(
+                                onClick = { onEdit(entry.id) },
+                                enabled = !state.isDeleting,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp),
+                                shape = MaterialTheme.shapes.large,
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                                Spacer(Modifier.size(8.dp))
+                                Text("编辑")
+                            }
+                            OutlinedButton(
+                                onClick = onDeleteClick,
+                                enabled = !state.isDeleting,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp),
+                                shape = MaterialTheme.shapes.large,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                if (state.isDeleting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.Delete, contentDescription = null)
+                                }
+                                Spacer(Modifier.size(8.dp))
+                                Text(if (state.isDeleting) "正在删除…" else "删除")
+                            }
                         }
                     }
                 }
@@ -304,7 +329,15 @@ private fun DetailContent(
                     )
                     Text(
                         text = visibleYuanText(entry.amountCents, amountsHidden),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription = if (amountsHidden) {
+                                    "金额已隐藏"
+                                } else {
+                                    visibleYuanText(entry.amountCents, hidden = false)
+                                }
+                            },
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif,

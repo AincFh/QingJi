@@ -2,8 +2,10 @@ package com.linjincheng.qingji.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,8 +38,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +55,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +67,7 @@ import com.linjincheng.qingji.ui.components.visibleYuanText
 import com.linjincheng.qingji.ui.theme.QingJiSpacing
 import com.linjincheng.qingji.util.DailyExpenseTotal
 import com.linjincheng.qingji.util.DateUtils
+import com.linjincheng.qingji.data.ExpenseCategory
 import com.linjincheng.qingji.viewmodel.CategoryStat
 import com.linjincheng.qingji.viewmodel.HomeUiState
 import java.math.BigDecimal
@@ -79,6 +86,12 @@ fun InsightsScreen(
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
     amountsHidden: Boolean,
+    onOpenDateDetails: ((Long) -> Unit)? = null,
+    onOpenCategoryDetails: ((ExpenseCategory) -> Unit)? = null,
+    selectedTrendEpochDay: Long? = null,
+    selectedCategory: ExpenseCategory? = null,
+    onTrendDateSelected: (Long) -> Unit = {},
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit = {},
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
     val selectedMonth = remember(state.year, state.month) {
@@ -143,13 +156,22 @@ fun InsightsScreen(
                             when (selectedSection) {
                                 0 -> {
                                     MonthlySummary(state = state, amountsHidden = amountsHidden)
-                                    CategoryBreakdown(state = state, amountsHidden = amountsHidden)
+                                    CategoryBreakdown(
+                                        state = state,
+                                        amountsHidden = amountsHidden,
+                                        onOpenCategoryDetails = onOpenCategoryDetails,
+                                        selectedCategory = selectedCategory,
+                                        onSelectedCategoryChanged = onSelectedCategoryChanged,
+                                    )
                                 }
 
                                 1 -> ExpenseTrend(
                                     state = state,
                                     selectedMonth = selectedMonth,
                                     amountsHidden = amountsHidden,
+                                    onOpenDateDetails = onOpenDateDetails,
+                                    selectedTrendEpochDay = selectedTrendEpochDay,
+                                    onTrendDateSelected = onTrendDateSelected,
                                 )
 
                                 else -> ComparisonSummary(
@@ -196,7 +218,7 @@ private fun AnalyticsSectionTabs(
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 44.dp)
+                        .heightIn(min = 48.dp)
                         .selectable(
                             selected = selected,
                             onClick = { onSelect(index) },
@@ -356,6 +378,13 @@ private fun MonthlySummary(state: HomeUiState, amountsHidden: Boolean) {
             )
             Text(
                 text = visibleYuanText(state.totalCents, amountsHidden),
+                modifier = Modifier.semantics {
+                    contentDescription = if (amountsHidden) {
+                        "金额已隐藏"
+                    } else {
+                        visibleYuanText(state.totalCents, hidden = false)
+                    }
+                },
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
@@ -428,12 +457,26 @@ private fun ComparisonSummary(
                         )
                         Text(
                             text = comparison.title,
+                            modifier = Modifier.semantics {
+                                contentDescription = if (amountsHidden) {
+                                    comparison.title.replace("¥••••", "金额已隐藏")
+                                } else {
+                                    comparison.title
+                                }
+                            },
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
                     Text(
                         text = comparison.detail,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (amountsHidden) {
+                                comparison.detail.replace("¥••••", "金额已隐藏")
+                            } else {
+                                comparison.detail
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -484,6 +527,9 @@ private fun ComparisonAmountRow(
             )
             Text(
                 text = visibleYuanText(amountCents, amountsHidden),
+                modifier = Modifier.semantics {
+                    contentDescription = amountContentDescription(amountCents, amountsHidden)
+                },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -515,6 +561,9 @@ private data class ComparisonCopy(
     val detail: String,
     val accent: androidx.compose.ui.graphics.Color,
 )
+
+private fun amountContentDescription(cents: Long, amountsHidden: Boolean): String =
+    if (amountsHidden) "金额已隐藏" else visibleYuanText(cents, hidden = false)
 
 @Composable
 private fun comparisonText(state: HomeUiState, amountsHidden: Boolean): ComparisonCopy {
@@ -578,10 +627,29 @@ private fun percentageChange(difference: Long, previous: Long): String =
         .toPlainString()
 
 @Composable
-private fun CategoryBreakdown(state: HomeUiState, amountsHidden: Boolean) {
+private fun CategoryBreakdown(
+    state: HomeUiState,
+    amountsHidden: Boolean,
+    onOpenCategoryDetails: ((ExpenseCategory) -> Unit)?,
+    selectedCategory: ExpenseCategory?,
+    onSelectedCategoryChanged: (ExpenseCategory?) -> Unit,
+) {
     val categories = state.categoryStats
         .filter { it.totalCents > 0L }
         .sortedByDescending(CategoryStat::totalCents)
+    var fallbackSelectedCategory by remember(state.year, state.month) {
+        mutableStateOf(categories.firstOrNull()?.category)
+    }
+    val resolvedSelectedCategory = resolveCategorySelection(
+        availableCategories = categories.map(CategoryStat::category),
+        requestedCategory = selectedCategory ?: fallbackSelectedCategory,
+    )
+    LaunchedEffect(selectedCategory, state.year, state.month, state.hasLoaded, categories) {
+        if (state.hasLoaded && selectedCategory != resolvedSelectedCategory) {
+            fallbackSelectedCategory = resolvedSelectedCategory
+            onSelectedCategoryChanged(resolvedSelectedCategory)
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs)) {
         SectionHeading(
@@ -603,13 +671,20 @@ private fun CategoryBreakdown(state: HomeUiState, amountsHidden: Boolean) {
                 shape = MaterialTheme.shapes.large,
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = QingJiSpacing.md, vertical = QingJiSpacing.xs),
+                    modifier = Modifier
+                        .padding(horizontal = QingJiSpacing.md, vertical = QingJiSpacing.xs)
+                        .selectableGroup(),
                     verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
                 ) {
                     categories.forEachIndexed { index, stat ->
                         CategoryBreakdownRow(
                             stat = stat,
                             amountsHidden = amountsHidden,
+                            selected = resolvedSelectedCategory == stat.category,
+                            onSelect = {
+                                fallbackSelectedCategory = stat.category
+                                onSelectedCategoryChanged(stat.category)
+                            },
                         )
                         if (index != categories.lastIndex) {
                             androidx.compose.material3.HorizontalDivider(
@@ -619,27 +694,82 @@ private fun CategoryBreakdown(state: HomeUiState, amountsHidden: Boolean) {
                     }
                 }
             }
+            categories.firstOrNull { it.category == resolvedSelectedCategory }?.let { stat ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = buildString {
+                                append(stat.category.label)
+                                append("，金额 ")
+                                append(amountContentDescription(stat.totalCents, amountsHidden))
+                                append("，占比 ")
+                                append(stat.percent)
+                                append("%")
+                            }
+                        },
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = QingJiSpacing.sm, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${stat.category.label} · ${visibleYuanText(stat.totalCents, amountsHidden)} · ${stat.percent}%",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (onOpenCategoryDetails != null) {
+                            TextButton(
+                                onClick = { onOpenCategoryDetails(stat.category) },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
+                                Text("查看流水")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun CategoryBreakdownRow(stat: CategoryStat, amountsHidden: Boolean) {
+private fun CategoryBreakdownRow(
+    stat: CategoryStat,
+    amountsHidden: Boolean,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
     val category = stat.category
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = QingJiSpacing.xs)
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = onSelect,
+            )
+            .clip(MaterialTheme.shapes.medium)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
+                else MaterialTheme.colorScheme.surface,
+            )
             .semantics(mergeDescendants = true) {
                 contentDescription = buildString {
                     append(category.label)
                     append("，金额 ")
-                    append(visibleYuanText(stat.totalCents, amountsHidden))
+                    append(amountContentDescription(stat.totalCents, amountsHidden))
                     append("，占比 ")
                     append(stat.percent)
                     append("%")
                 }
-            },
+            }
+            .padding(vertical = QingJiSpacing.xs, horizontal = QingJiSpacing.xs),
         verticalArrangement = Arrangement.spacedBy(QingJiSpacing.xs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -709,17 +839,42 @@ private fun ExpenseTrend(
     state: HomeUiState,
     selectedMonth: YearMonth,
     amountsHidden: Boolean,
+    onOpenDateDetails: ((Long) -> Unit)?,
+    selectedTrendEpochDay: Long?,
+    onTrendDateSelected: (Long) -> Unit,
 ) {
     var selectedDayCount by rememberSaveable { mutableIntStateOf(7) }
     val isCurrentMonth = selectedMonth == YearMonth.now()
     val days = if (selectedDayCount == 7) state.dailyTrend else state.dailyTrend30
-    var selectedEpochDay by rememberSaveable(
+    var fallbackSelectedEpochDay by rememberSaveable(
         selectedMonth.toString(),
         selectedDayCount,
         days.firstOrNull()?.epochDay ?: 0L,
         days.lastOrNull()?.epochDay ?: 0L,
-    ) { androidx.compose.runtime.mutableStateOf<Long?>(null) }
-    val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay } ?: days.firstOrNull()
+    ) { mutableStateOf<Long?>(days.lastOrNull()?.epochDay) }
+    val selectedEpochDay = resolveTrendSelection(
+        days = days,
+        requestedEpochDay = selectedTrendEpochDay ?: fallbackSelectedEpochDay,
+    )
+    LaunchedEffect(
+        selectedTrendEpochDay,
+        selectedDayCount,
+        selectedMonth,
+        days.firstOrNull()?.epochDay,
+        days.lastOrNull()?.epochDay,
+    ) {
+        selectedEpochDay?.let { resolvedEpochDay ->
+            if (selectedTrendEpochDay != resolvedEpochDay) {
+                fallbackSelectedEpochDay = resolvedEpochDay
+                onTrendDateSelected(resolvedEpochDay)
+            }
+        }
+    }
+    val selectTrendDate: (Long) -> Unit = { epochDay ->
+        fallbackSelectedEpochDay = epochDay
+        onTrendDateSelected(epochDay)
+    }
+    val selectedDay = days.firstOrNull { it.epochDay == selectedEpochDay }
     val title = when {
         isCurrentMonth && selectedDayCount == 7 -> "近 7 天趋势"
         isCurrentMonth -> "近 30 天趋势"
@@ -728,7 +883,8 @@ private fun ExpenseTrend(
     }
     val total = days.sumOf(DailyExpenseTotal::totalCents)
     val daysWithSpending = days.count { it.totalCents > 0L }
-    val dateRangeSummary = if (days.isNotEmpty() && total > 0L) {
+    val transactionCount = days.sumOf(DailyExpenseTotal::transactionCount)
+    val dateRangeSummary = if (days.isNotEmpty()) {
         buildString {
             append(DateUtils.formatDate(days.first().epochDay))
             append(" 至 ")
@@ -736,11 +892,14 @@ private fun ExpenseTrend(
             append(" · ")
             append(daysWithSpending)
             append(" 天有消费")
+            append(" · ")
+            append(transactionCount)
+            append(" 笔")
             if (amountsHidden) {
                 append(" · 金额已隐藏")
             } else {
                 append(" · 合计 ")
-                append(visibleYuanText(total, false))
+                append(visibleYuanText(total, amountsHidden))
             }
         }
     } else {
@@ -769,11 +928,6 @@ private fun ExpenseTrend(
             EmptyAnalyticsSection(
                 text = if (state.isLoading) "正在读取趋势…" else "暂无可展示的日期数据",
             )
-        } else if (total <= 0L) {
-            EmptyAnalyticsSection(
-                text = "这段时间还没有消费记录",
-                compact = true,
-            )
         } else {
             dateRangeSummary?.let { summary ->
                 Text(
@@ -786,15 +940,20 @@ private fun ExpenseTrend(
                 days = days,
                 amountsHidden = amountsHidden,
                 selectedEpochDay = selectedDay?.epochDay,
+                onSelectDate = selectTrendDate,
             )
             selectedDay?.let { day ->
-                SelectedDaySummary(day = day, amountsHidden = amountsHidden)
+                SelectedDaySummary(
+                    day = day,
+                    amountsHidden = amountsHidden,
+                    onOpenDateDetails = onOpenDateDetails,
+                )
             }
             DaySelector(
                 days = days,
                 selectedEpochDay = selectedDay?.epochDay,
                 amountsHidden = amountsHidden,
-                onSelect = { selectedEpochDay = it },
+                onSelect = selectTrendDate,
             )
         }
     }
@@ -805,6 +964,7 @@ private fun TrendChart(
     days: List<DailyExpenseTotal>,
     amountsHidden: Boolean,
     selectedEpochDay: Long?,
+    onSelectDate: (Long) -> Unit,
 ) {
     val maxCents = days.maxOfOrNull { it.totalCents.coerceAtLeast(0L) } ?: 0L
     val maxIndex = days.indexOfLast { it.totalCents == maxCents }
@@ -812,7 +972,7 @@ private fun TrendChart(
     val markerColor = MaterialTheme.colorScheme.tertiary
     val surfaceColor = MaterialTheme.colorScheme.surface
     val chartDescription = days.joinToString(separator = "；") { day ->
-        "${DateUtils.formatDate(day.epochDay)}支出${visibleYuanText(day.totalCents, amountsHidden)}"
+        "${DateUtils.formatDate(day.epochDay)}支出${amountContentDescription(day.totalCents, amountsHidden)}，${day.transactionCount}笔"
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -827,19 +987,33 @@ private fun TrendChart(
             val peakText = when {
                 peak == null || maxCents <= 0L -> "暂无消费"
                 amountsHidden -> "最高消费日 ${DateUtils.formatDate(peak.epochDay)}"
-                else -> "最高 ${DateUtils.formatDate(peak.epochDay)} · ${visibleYuanText(maxCents, false)}"
+                else -> "最高 ${DateUtils.formatDate(peak.epochDay)} · ${visibleYuanText(maxCents, amountsHidden)}"
             }
             Text(
                 text = peakText,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp)
-                    .semantics { contentDescription = chartDescription },
-            ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val chartWidth = maxOf(maxWidth, (days.size * 48).dp)
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    Canvas(
+                        modifier = Modifier
+                            .width(chartWidth)
+                            .height(112.dp)
+                            .pointerInput(days) {
+                                detectTapGestures { position ->
+                                    if (days.isNotEmpty()) {
+                                        val step = size.width.toFloat() / days.size
+                                        val index = (position.x / step)
+                                            .toInt()
+                                            .coerceIn(days.indices)
+                                        onSelectDate(days[index].epochDay)
+                                    }
+                                }
+                            }
+                            .semantics { contentDescription = chartDescription },
+                    ) {
                 val inset = 6.dp.toPx()
                 val top = 10.dp.toPx()
                 val baseline = size.height - 10.dp.toPx()
@@ -893,16 +1067,27 @@ private fun TrendChart(
                         )
                     }
                 }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SelectedDaySummary(day: DailyExpenseTotal, amountsHidden: Boolean) {
+private fun SelectedDaySummary(
+    day: DailyExpenseTotal,
+    amountsHidden: Boolean,
+    onOpenDateDetails: ((Long) -> Unit)?,
+) {
     val date = LocalDate.ofEpochDay(day.epochDay)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${DateUtils.formatDate(day.epochDay)}，支出 " +
+                    amountContentDescription(day.totalCents, amountsHidden) + "，${day.transactionCount} 笔"
+            },
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f),
     ) {
@@ -921,7 +1106,8 @@ private fun SelectedDaySummary(day: DailyExpenseTotal, amountsHidden: Boolean) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
-                    text = if (day.totalCents > 0L) "当日消费" else "这一天暂无消费记录",
+                    text = "${day.transactionCount} 笔 · " +
+                        if (day.transactionCount > 0) "当日消费" else "这一天暂无消费记录",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
@@ -932,6 +1118,14 @@ private fun SelectedDaySummary(day: DailyExpenseTotal, amountsHidden: Boolean) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.tertiary,
             )
+            if (onOpenDateDetails != null) {
+                TextButton(
+                    onClick = { onOpenDateDetails(day.epochDay) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("查看流水")
+                }
+            }
         }
     }
 }
@@ -955,7 +1149,10 @@ private fun DaySelector(
             val dateDescription = buildString {
                 append(DateUtils.formatDate(day.epochDay))
                 append("，支出 ")
-                append(visibleYuanText(day.totalCents, amountsHidden))
+                append(amountContentDescription(day.totalCents, amountsHidden))
+                append("，")
+                append(day.transactionCount)
+                append(" 笔")
             }
             Surface(
                 modifier = Modifier

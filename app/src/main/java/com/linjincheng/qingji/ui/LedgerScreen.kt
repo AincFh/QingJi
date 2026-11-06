@@ -75,6 +75,7 @@ fun RecordsScreen(
     onCategoryFilterChange: (ExpenseCategory?) -> Unit,
     onMonthFilterChange: (YearMonth?) -> Unit,
     onRetry: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit,
     amountsHidden: Boolean,
 ) {
@@ -88,7 +89,7 @@ fun RecordsScreen(
     val resultTotalCents = remember(state.entries) { state.entries.sumOf(ExpenseEntry::amountCents) }
     val hasActiveFilter = state.searchText.isNotBlank() ||
         state.categoryFilter != null ||
-        state.historyMonthFilter != null
+        state.expenseFilter.dateRange != null
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         LazyColumn(
@@ -110,6 +111,7 @@ fun RecordsScreen(
                     hasActiveFilter = hasActiveFilter,
                     showSummary = state.hasLoaded && !state.loadFailed,
                     amountsHidden = amountsHidden,
+                    onOpenCalendar = onOpenCalendar,
                     onOpenSettings = onOpenSettings,
                 )
             }
@@ -144,6 +146,24 @@ fun RecordsScreen(
                         onSearch = { defaultKeyboardAction(ImeAction.Search) },
                     ),
                 )
+            }
+
+            if (state.expenseFilter.dateRange != null && state.historyMonthFilter == null) {
+                item {
+                    FilterChip(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        selected = true,
+                        onClick = { onMonthFilterChange(null) },
+                        label = { Text("日期 · ${state.activeDateFilterLabel}") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                    )
+                }
             }
 
             item {
@@ -215,7 +235,7 @@ fun RecordsScreen(
                         item(key = "history-month-all") {
                             MonthFilterChip(
                                 label = "全部月份",
-                                selected = state.historyMonthFilter == null,
+                                selected = state.expenseFilter.dateRange == null,
                                 onClick = { onMonthFilterChange(null) },
                             )
                         }
@@ -331,6 +351,7 @@ private fun LedgerHeader(
     hasActiveFilter: Boolean,
     showSummary: Boolean,
     amountsHidden: Boolean,
+    onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(QingJiSpacing.sm)) {
@@ -351,6 +372,12 @@ private fun LedgerHeader(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            TextButton(
+                onClick = onOpenCalendar,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text("日历")
             }
             // 入口保留在顶部方便从账单页快速调整全局隐私和显示偏好。
             androidx.compose.material3.IconButton(
@@ -451,6 +478,7 @@ private fun CategoryFilterChip(
     onClick: () -> Unit,
 ) {
     FilterChip(
+        modifier = Modifier.heightIn(min = 48.dp),
         selected = selected,
         onClick = onClick,
         label = { Text(label, maxLines = 1) },
@@ -481,6 +509,7 @@ private fun MonthFilterChip(
     onClick: () -> Unit,
 ) {
     FilterChip(
+        modifier = Modifier.heightIn(min = 48.dp),
         selected = selected,
         onClick = onClick,
         label = { Text(label, maxLines = 1) },
