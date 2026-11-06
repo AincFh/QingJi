@@ -66,6 +66,7 @@ fun SettingsScreen(
     onOpenBudget: (() -> Unit)? = null,
     onExportBackup: (() -> Unit)? = null,
     onRestoreBackup: (() -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val versionName = remember(context) { readAppVersionName(context) }
@@ -315,7 +316,7 @@ fun SettingsScreen(
                                 )
                             }
 
-                            if (onExportBackup != null || onRestoreBackup != null) {
+                            if (onExportBackup != null || onRestoreBackup != null || onExportCsv != null) {
                                 SettingsDivider()
                                 if (onExportBackup != null) {
                                     SettingsActionRow(
@@ -332,6 +333,14 @@ fun SettingsScreen(
                                         title = "恢复本地备份",
                                         description = "选择文件后先查看校验结果和合并预览。",
                                         onClick = onRestoreBackup,
+                                    )
+                                }
+                                if (onExportCsv != null) {
+                                    SettingsDivider(startIndent = QingJiSpacing.md)
+                                    SettingsActionRow(
+                                        title = "导出账单 CSV",
+                                        description = "使用系统文件保存器导出全部账单，可在 Excel 中打开。仅供查看和分析，不能替代可恢复的 JSON 备份；文件可能包含私人支出与备注，请妥善保管。",
+                                        onClick = onExportCsv,
                                     )
                                 }
                             }
